@@ -29,12 +29,12 @@ class STable
 	std::vector<bool> test_table;
 	size_t num_keys;
 
-	inline ptr_t& ptr_at(ktype k)
+	inline ptr_t& ptr_at(const ktype& key)
 	{
 		return table.at(hash(key));
 	}
 
-	inline const ptr_t& ptr_at(ktype k) const
+	inline const ptr_t& ptr_at(const ktype& key) const
 	{
 		return table.at(hash(key));
 	}
@@ -46,23 +46,23 @@ public:
 		num_keys = 1;
 	}
 
-	bool insert(ktype key, vtype value)
+	bool insert(const pair_t& pair)
 	{
 		// already exists
-		if (count(key)) return false;
+		if (count(pair.first)) return false;
 
-		const ptr_t& ptr = ptr_at(key);
+		ptr_t& ptr = ptr_at(pair.first);
 		++num_keys;
 
 		// collision
 		if (ptr)
 		{
 			// TODO rebuild table
-			std::vector<bool> test(num_keys * num_keys);
+			test_table.resize(num_keys * num_keys);
 
 			while (true)
 			{
-				// reset test to falses
+				// reset test_table to falses
 
 			}
 
@@ -70,23 +70,24 @@ public:
 		}
 
 		// easy insert
-		ptr.reset(new std::pair<ktype, vtype>(key, value));
+		ptr.reset(new std::pair<ktype, vtype>(pair));
 		return true;
 	}
 
-	void erase(ktype key)
+	size_t erase(const ktype& key)
 	{
-		if (!count(key)) return;
+		if (!count(key)) return 0;
 		table[hash(key)].reset();
+		return 1;
 	}
 
-	vtype at(const ktype key) const
+	vtype at(const ktype& key) const
 	{
 		if (!count(key)) throw std::out_of_range("out of range");
 		return ptr_at(key)->second;
 	}
 
-	int count(const ktype key) const
+	int count(const ktype& key) const
 	{
 		const ptr_t& ptr = ptr_at(key);
 		return ptr && ptr->first == key;
