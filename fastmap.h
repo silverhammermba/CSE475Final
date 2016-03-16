@@ -1,3 +1,8 @@
+#include <functional>
+#include <memory>
+#include <utility>
+#include <vector>
+
 typedef int vtype;
 typedef int ktype;
 
