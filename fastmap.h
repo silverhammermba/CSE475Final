@@ -5,12 +5,11 @@ typedef std::function<size_t(ktype)> hash_t;
 
 hash_t gen_random_hash_func(size_t m)
 {
-	int p = random_prime_greater_than(m);
-	int a;
-	do {
-		a = random_int() % p;
-	} while(a == 0)
-	b = random_int() % p;
+	unsigned int p = random_prime_greater_than(m);
+	unsigned int a = 0;
+	while (a == 0) a = random_int() % p;
+	unsigned int b = random_int() % p;
+
 	return [m,p,a,b](ktype k) { return ((a * k + b) % p) % m; };
 }
 
