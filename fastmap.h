@@ -25,7 +25,7 @@ class STable
 	typedef std::vector<ptr_t> table_t;
 
 	std::function<size_t(ktype)> hash;
-	table_t m_table;
+	table_t table;
 	std::vector<bool> test_table;
 	size_t num_keys;
 
@@ -34,9 +34,14 @@ class STable
 		return table.at(hash(key));
 	}
 
+	inline const ptr_t& ptr_at(ktype k) const
+	{
+		return table.at(hash(key));
+	}
+
 public:
 	STable(vtype v)
-		: m_table(1, v), test_table(1, false), hash([](ktype k) { return 0; })
+		: table(1, v), test_table(1, false), hash([](ktype k) { return 0; })
 	{
 		num_keys = 1;
 	}
