@@ -51,7 +51,7 @@ public:
 		// already exists
 		if (count(key)) return false;
 
-		auto ptr = ptr_at(key);
+		const ptr_t& ptr = ptr_at(key);
 		++num_keys;
 
 		// collision
@@ -88,7 +88,7 @@ public:
 
 	int count(const ktype key) const
 	{
-		auto ptr = ptr_at(key);
+		const ptr_t& ptr = ptr_at(key);
 		return ptr && ptr->first == key;
 	}
 };
