@@ -11,4 +11,4 @@ $(BIN): $(OBJ)
 main.o: fastmap.h
 
 clean:
-	rm -f $(OBJ) $(BIN)
+	$(RM) $(OBJ) $(BIN)
