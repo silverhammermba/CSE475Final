@@ -71,13 +71,37 @@ public:
 		if (ptr)
 		{
 			// TODO rebuild table
-			test_table.resize(num_keys * num_keys);
+			auto table_size = num_keys * num_keys;
+			test_table.resize(table_size);
 
 			while (true)
 			{
-				// reset test_table to falses
+				bool is_collision_free = true;
+				
+				std::fill(test_table.begin(), test_table.end(), false);
+				hash = gen_random_hash_func(table_size);
+				
+				test_table[hash(pair.first)] = true;	// guaranteed to be false initially
+				for (auto& ptr : table)
+				{
+					if (!ptr) continue;
+					auto hashed_key = hash(ptr->first);
+					if (test_table.at(hashed_key))	// check if collision with new hash fcn
+					{
+						is_collision_free = false;
+						break;
+					}
+					else
+					{
+						test_table[hashed_key] = true;
+					}
+				}
 
+				if (is_collision_free) break;
 			}
+
+			// rehash table using moves
+			// hash new key and add
 
 			return true;
 		}
