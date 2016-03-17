@@ -35,28 +35,28 @@ class STable
 	typedef std::unique_ptr<pair_t> ptr_t;
 	typedef std::vector<ptr_t> table_t;
 
-	table_t table;
-	std::vector<bool> test_table;
-	std::function<size_t(ktype)> hash;
-	size_t num_keys;
+	table_t m_table;
+	std::vector<bool> m_test_table;
+	std::function<size_t(ktype)> m_hash;
+	size_t m_num_keys;
 
 	inline ptr_t& ptr_at(const ktype& key)
 	{
-		return table.at(hash(key));
+		return m_table.at(m_hash(key));
 	}
 
 	inline const ptr_t& ptr_at(const ktype& key) const
 	{
-		return table.at(hash(key));
+		return m_table.at(m_hash(key));
 	}
 
 public:
 	STable(const pair_t& pair)
-		: test_table(1, false),
-		hash([](ktype) { return 0; })
+		: m_test_table(1, false),
+		m_hash([](ktype) { return 0; })
 	{
-		table.emplace_back(new pair_t(pair));
-		num_keys = 1;
+		m_table.emplace_back(new pair_t(pair));
+		m_num_keys = 1;
 	}
 
 	bool insert(const pair_t& pair)
@@ -65,35 +65,35 @@ public:
 		if (count(pair.first)) return false;
 
 		ptr_t& ptr = ptr_at(pair.first);
-		++num_keys;
+		++m_num_keys;
 
 		// collision
 		if (ptr)
 		{
 			// TODO rebuild table
-			auto table_size = num_keys * num_keys;
-			test_table.resize(table_size);
+			auto table_size = m_num_keys * m_num_keys;
+			m_test_table.resize(table_size);
 
 			while (true)
 			{
 				bool is_collision_free = true;
 				
-				std::fill(test_table.begin(), test_table.end(), false);
-				hash = gen_random_hash_func(table_size);
+				std::fill(m_test_table.begin(), m_test_table.end(), false);
+				m_hash = gen_random_hash_func(table_size);
 				
-				test_table[hash(pair.first)] = true;	// guaranteed to be false initially
-				for (auto& ptr : table)
+				m_test_table[m_hash(pair.first)] = true;	// guaranteed to be false initially
+				for (auto& ptr : m_table)
 				{
 					if (!ptr) continue;
-					auto hashed_key = hash(ptr->first);
-					if (test_table.at(hashed_key))	// check if collision with new hash fcn
+					auto hashed_key = m_hash(ptr->first);
+					if (m_test_table.at(hashed_key))	// check if collision with new hash fcn
 					{
 						is_collision_free = false;
 						break;
 					}
 					else
 					{
-						test_table[hashed_key] = true;
+						m_test_table[hashed_key] = true;
 					}
 				}
 
@@ -114,7 +114,7 @@ public:
 	size_t erase(const ktype& key)
 	{
 		if (!count(key)) return 0;
-		table[hash(key)].reset();
+		m_table[m_hash(key)].reset();
 		return 1;
 	}
 
