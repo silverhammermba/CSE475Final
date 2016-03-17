@@ -83,7 +83,7 @@ public:
 		}
 
 		// easy insert
-		ptr.reset(new std::pair<ktype, vtype>(pair));
+		ptr.reset(new pair_t(pair));
 		return true;
 	}
 
