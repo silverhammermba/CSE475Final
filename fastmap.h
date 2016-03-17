@@ -51,8 +51,10 @@ class STable
 	}
 
 public:
-	STable(vtype v)
-		: table(1, v), test_table(1, false), hash([](ktype) { return 0; })
+	STable(const pair_t& pair)
+		: table(1, std::make_unique<pair_t>(pair)),
+		test_table(1, false), 
+		hash([](ktype) { return 0; })
 	{
 		num_keys = 1;
 	}
