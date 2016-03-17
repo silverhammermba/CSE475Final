@@ -52,10 +52,10 @@ class STable
 
 public:
 	STable(const pair_t& pair)
-		: table(1, std::make_unique<pair_t>(pair)),
-		test_table(1, false), 
+		: test_table(1, false), 
 		hash([](ktype) { return 0; })
 	{
+		table.emplace_back(new pair_t(pair));
 		num_keys = 1;
 	}
 
@@ -83,7 +83,7 @@ public:
 		}
 
 		// easy insert
-		ptr.reset(new std::pair<ktype, vtype>(pair));
+		ptr.reset(new pair_t(pair));
 		return true;
 	}
 
