@@ -31,7 +31,7 @@ hash_t gen_random_hash_func(size_t m)
 
 class STable
 {
-	typedef std::pair<ktype,vtype> pair_t;
+	typedef std::pair<ktype, vtype> pair_t;
 	typedef std::unique_ptr<pair_t> ptr_t;
 	typedef std::vector<ptr_t> table_t;
 
@@ -52,10 +52,10 @@ class STable
 
 public:
 	STable(const pair_t& pair)
-		: table(1, std::make_unique<pair_t>(pair)),
-		test_table(1, false), 
+		: test_table(1, false),
 		hash([](ktype) { return 0; })
 	{
+		table.emplace_back(new pair_t(pair));
 		num_keys = 1;
 	}
 
