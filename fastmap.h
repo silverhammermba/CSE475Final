@@ -153,7 +153,6 @@ public:
 	// return the value matching key
 	const vtype& at(const ktype& key) const
 	{
-		if (!count(key)) throw std::out_of_range("out of range");
 		return ptr_at(key)->second;
 	}
 
