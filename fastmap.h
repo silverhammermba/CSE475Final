@@ -63,9 +63,14 @@ public:
 	}
 
 	// rebuild the hash table with capacity new_capacity and add pair to it
-	void rebuild_and_add(size_t new_capacity, const pair_t& pair)
+	bool rebuild_and_insert(size_t new_capacity, const pair_t& pair)
 	{
-		m_capacity = new_capacity;
+		// nothing to do if the key already exists
+		if (count(pair.first)) return false;
+
+		++m_num_keys;
+
+		m_capacity = std::max(m_num_keys, new_capacity);
 		size_t new_size = 2 * m_capacity * (m_capacity - 1);
 
 		m_test_table.resize(new_size);
@@ -110,31 +115,22 @@ public:
 
 			m_table[m_hash(ptr->first)] = std::move(ptr);
 		}
+
+		return true;
 	}
 
 	// try to insert pair into the hash table, rebuilding if necessary
 	bool insert(const pair_t& pair)
 	{
-		// can't insert existing key
-		if (count(pair.first)) return false;
-
-		++m_num_keys;
-
 		// need to rebuild if this puts us over capacity
-		if (m_num_keys > m_capacity)
-		{
-			rebuild_and_add(m_capacity * 2, pair);
-			return true;
-		}
+		if (m_num_keys >= m_capacity) return rebuild_and_insert(m_capacity * 2, pair);
 
 		ptr_t& ptr = ptr_at(pair.first);
 
 		// need to rebuild if this causes a collision
-		if (!ptr)
-		{
-			rebuild_and_add(m_capacity, pair);
-			return true;
-		}
+		if (!ptr) return rebuild_and_insert(m_capacity, pair);
+
+		++m_num_keys;
 
 		// under capacity and collision-free, so simply insert
 		ptr.reset(new pair_t(pair));
