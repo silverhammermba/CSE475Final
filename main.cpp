@@ -16,6 +16,5 @@ int main(int, char**)
 		int i = 0;
 	}
 
-
 	return EXIT_SUCCESS;
 }

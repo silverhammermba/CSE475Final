@@ -38,6 +38,7 @@ class PerfectTable
 	table_t m_table;
 	std::vector<bool> m_test_table;
 	std::function<size_t(ktype)> m_hash;
+	size_t m_capacity;
 	size_t m_num_keys;
 
 	inline ptr_t& ptr_at(const ktype& key)
@@ -57,6 +58,55 @@ public:
 	{
 		m_table.emplace_back(new pair_t(pair));
 		m_num_keys = 1;
+		m_capacity = m_num_keys * 2;
+	}
+
+	void rebuild_and_add(size_t new_capacity, const pair_t& pair)
+	{
+		m_capacity = new_capacity;
+		size_t new_size = 2 * m_capacity * (m_capacity - 1);
+
+		m_test_table.resize(new_size);
+
+		while (true)
+		{
+			bool is_collision_free = true;
+
+			std::fill(m_test_table.begin(), m_test_table.end(), false);
+			m_hash = gen_random_hash_func(new_size);
+
+			m_test_table[m_hash(pair.first)] = true;	// guaranteed to be false initially
+			for (auto& ptr : m_table)
+			{
+				if (!ptr) continue;
+
+				auto hashed_key = m_hash(ptr->first);
+				if (m_test_table.at(hashed_key))	// check if collision with new hash fcn
+				{
+					is_collision_free = false;
+					break;
+				}
+
+				m_test_table[hashed_key] = true;
+			}
+
+			if (is_collision_free) break;
+		}
+
+		// make a new table of size
+		table_t old_table = std::move(m_table);
+		m_table.resize(new_size);
+
+		// insert new pair
+		m_table[m_hash(pair.first)] = std::make_unique<pair_t>(pair);
+
+		// rehash old pairs
+		for (auto& ptr : old_table)
+		{
+			if (!ptr) continue;
+
+			m_table[m_hash(ptr->first)] = std::move(ptr);
+		}
 	}
 
 	bool insert(const pair_t& pair)
@@ -64,61 +114,27 @@ public:
 		// already exists
 		if (count(pair.first)) return false;
 
-		ptr_t& ptr = ptr_at(pair.first);
 		++m_num_keys;
 
-		// collision
-		if (ptr)
+		// if we need to grow the table
+		if (m_num_keys > m_capacity)
 		{
-			// TODO rebuild table
-			auto table_size = m_num_keys * m_num_keys;
-			m_test_table.resize(table_size);
-
-			while (true)
-			{
-				bool is_collision_free = true;
-
-				std::fill(m_test_table.begin(), m_test_table.end(), false);
-				m_hash = gen_random_hash_func(table_size);
-				
-				m_test_table[m_hash(pair.first)] = true;	// guaranteed to be false initially
-				for (auto& ptr : m_table)
-				{
-					if (!ptr) continue;
-
-					auto hashed_key = m_hash(ptr->first);
-					if (m_test_table.at(hashed_key))	// check if collision with new hash fcn
-					{
-						is_collision_free = false;
-						break;
-					}
-
-					m_test_table[hashed_key] = true;
-				}
-
-				if (is_collision_free) break;
-			}
-
-			// move old hash table to temp table
-			table_t old_table = std::move(m_table);
-			m_table.resize(table_size); // should be filled with nulls
-
-			// insert new pair
-			m_table[m_hash(pair.first)] = std::make_unique<pair_t>(pair);
-
-			// rehash old pairs
-			for (auto& ptr : old_table)
-			{
-				if (!ptr) continue;
-
-				m_table[m_hash(ptr->first)] = std::move(ptr);
-			}
-
+			rebuild_and_add(m_capacity * 2, pair);
 			return true;
 		}
 
-		// easy insert
+		ptr_t& ptr = ptr_at(pair.first);
+
+		// if there is a collision
+		if (!ptr)
+		{
+			rebuild_and_add(m_capacity, pair);
+			return true;
+		}
+
+		// no collision, no over capacity
 		ptr.reset(new pair_t(pair));
+
 		return true;
 	}
 
