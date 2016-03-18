@@ -19,7 +19,7 @@ unsigned int random_uint()
 	          // guaranteed to be random.
 }
 
-hash_t gen_random_hash_func(size_t m)
+hash_t random_hash(size_t m)
 {
 	unsigned int p = random_prime_at_least(m);
 	unsigned int a = 0;
@@ -41,6 +41,7 @@ class PerfectTable
 	size_t m_capacity;
 	size_t m_num_keys;
 
+	// convenience functions for getting the unique_ptr for a key
 	inline ptr_t& ptr_at(const ktype& key)
 	{
 		return m_table.at(m_hash(key));
@@ -61,6 +62,7 @@ public:
 		m_capacity = m_num_keys * 2;
 	}
 
+	// rebuild the hash table with capacity new_capacity and add pair to it
 	void rebuild_and_add(size_t new_capacity, const pair_t& pair)
 	{
 		m_capacity = new_capacity;
@@ -68,20 +70,21 @@ public:
 
 		m_test_table.resize(new_size);
 
+		// find a perfect hash function for the new size
 		while (true)
 		{
 			bool is_collision_free = true;
 
 			std::fill(m_test_table.begin(), m_test_table.end(), false);
-			m_hash = gen_random_hash_func(new_size);
+			m_hash = random_hash(new_size);
 
-			m_test_table[m_hash(pair.first)] = true;	// guaranteed to be false initially
+			m_test_table[m_hash(pair.first)] = true; // guaranteed to be false initially
 			for (auto& ptr : m_table)
 			{
 				if (!ptr) continue;
 
 				auto hashed_key = m_hash(ptr->first);
-				if (m_test_table.at(hashed_key))	// check if collision with new hash fcn
+				if (m_test_table.at(hashed_key)) // check if collision with new hash fcn
 				{
 					is_collision_free = false;
 					break;
@@ -93,11 +96,11 @@ public:
 			if (is_collision_free) break;
 		}
 
-		// make a new table of size
+		// rebuild the table with the new hash
 		table_t old_table = std::move(m_table);
 		m_table.resize(new_size);
 
-		// insert new pair
+		// new pair
 		m_table[m_hash(pair.first)] = std::make_unique<pair_t>(pair);
 
 		// rehash old pairs
@@ -109,14 +112,15 @@ public:
 		}
 	}
 
+	// try to insert pair into the hash table, rebuilding if necessary
 	bool insert(const pair_t& pair)
 	{
-		// already exists
+		// can't insert existing key
 		if (count(pair.first)) return false;
 
 		++m_num_keys;
 
-		// if we need to grow the table
+		// need to rebuild if this puts us over capacity
 		if (m_num_keys > m_capacity)
 		{
 			rebuild_and_add(m_capacity * 2, pair);
@@ -125,19 +129,20 @@ public:
 
 		ptr_t& ptr = ptr_at(pair.first);
 
-		// if there is a collision
+		// need to rebuild if this causes a collision
 		if (!ptr)
 		{
 			rebuild_and_add(m_capacity, pair);
 			return true;
 		}
 
-		// no collision, no over capacity
+		// under capacity and collision-free, so simply insert
 		ptr.reset(new pair_t(pair));
 
 		return true;
 	}
 
+	// remove pair matching key from the table
 	size_t erase(const ktype& key)
 	{
 		if (!count(key)) return 0;
@@ -145,12 +150,14 @@ public:
 		return 1;
 	}
 
-	vtype at(const ktype& key) const
+	// return the value matching key
+	const vtype& at(const ktype& key) const
 	{
 		if (!count(key)) throw std::out_of_range("out of range");
 		return ptr_at(key)->second;
 	}
 
+	// return 1 if pair matching key is in table, else return 0
 	int count(const ktype& key) const
 	{
 		const ptr_t& ptr = ptr_at(key);
