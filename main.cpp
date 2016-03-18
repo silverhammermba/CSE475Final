@@ -13,7 +13,7 @@ int main(int, char**)
 	}
 	catch (...)
 	{
-		int i = 0;
+		return EXIT_FAILURE;
 	}
 
 	return EXIT_SUCCESS;

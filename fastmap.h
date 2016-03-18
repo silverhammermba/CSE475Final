@@ -35,11 +35,11 @@ class PerfectTable
 	typedef std::unique_ptr<pair_t> ptr_t;
 	typedef std::vector<ptr_t> table_t;
 
-	table_t m_table;                     // internal hash table
-	std::vector<bool> m_test_table;      // table for testing for collision
-	std::function<size_t(ktype)> m_hash; // hash function
-	size_t m_capacity;                   // how many pairs can be stored with rebuilding
-	size_t m_num_pairs;                   // how many pairs are currently stored
+	table_t m_table;                // internal hash table
+	std::vector<bool> m_test_table; // table for testing for collision
+	hash_t m_hash;                  // hash function
+	size_t m_capacity;              // how many pairs can be stored with rebuilding
+	size_t m_num_pairs;             // how many pairs are currently stored
 
 	// convenience functions for getting the unique_ptr for a key
 	inline ptr_t& ptr_at(const ktype& key)
