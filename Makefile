@@ -8,7 +8,7 @@ BIN=main
 $(BIN): $(OBJ)
 	$(CXX) $(LDFLAGS) -o $@ $+ $(LDLIBS)
 
-main.o: fastmap.h
+main.o: fastmap.h random_utils.h
 
 clean:
 	$(RM) $(OBJ) $(BIN)

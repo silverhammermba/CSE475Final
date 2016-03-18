@@ -3,28 +3,17 @@
 #include <utility>
 #include <vector>
 
+#include "random_utils.h"
+
 typedef int vtype;
 typedef int ktype;
-
 typedef std::function<size_t(ktype)> hash_t;
-
-unsigned int random_prime_at_least(size_t m)
-{
-	return 2; // TODO probably not greater than m
-}
-
-unsigned int random_uint()
-{
-	return 4; // chosen by fair dice roll.
-	          // guaranteed to be random.
-}
 
 hash_t random_hash(size_t m)
 {
 	unsigned int p = random_prime_at_least(m);
-	unsigned int a = 0;
-	while (a == 0) a = random_uint() % p;
-	unsigned int b = random_uint() % p;
+	unsigned int a = random_uint(1, p - 1);
+	unsigned int b = random_uint(0, p - 1);
 
 	return [m,p,a,b](ktype k) { return ((a * k + b) % p) % m; };
 }
