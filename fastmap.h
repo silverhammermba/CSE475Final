@@ -39,7 +39,7 @@ class PerfectTable
 	std::vector<bool> m_test_table;      // table for testing for collision
 	std::function<size_t(ktype)> m_hash; // hash function
 	size_t m_capacity;                   // how many pairs can be stored with rebuilding
-	size_t m_num_keys;                   // how many pairs are currently stored
+	size_t m_num_pairs;                   // how many pairs are currently stored
 
 	// convenience functions for getting the unique_ptr for a key
 	inline ptr_t& ptr_at(const ktype& key)
@@ -58,8 +58,8 @@ public:
 		m_hash([](ktype) { return 0; })
 	{
 		m_table.emplace_back(new pair_t(pair));
-		m_num_keys = 1;
-		m_capacity = m_num_keys * 2;
+		m_num_pairs = 1;
+		m_capacity = m_num_pairs * 2;
 	}
 
 	// rebuild the hash table with capacity new_capacity and add pair to it
@@ -68,9 +68,9 @@ public:
 		// nothing to do if the key already exists
 		if (count(pair.first)) return false;
 
-		++m_num_keys;
+		++m_num_pairs;
 
-		m_capacity = std::max(m_num_keys, new_capacity);
+		m_capacity = std::max(m_num_pairs, new_capacity);
 		size_t new_size = 2 * m_capacity * (m_capacity - 1);
 
 		m_test_table.resize(new_size);
@@ -123,14 +123,14 @@ public:
 	bool insert(const pair_t& pair)
 	{
 		// need to rebuild if this puts us over capacity
-		if (m_num_keys >= m_capacity) return rebuild_and_insert(m_capacity * 2, pair);
+		if (m_num_pairs >= m_capacity) return rebuild_and_insert(m_capacity * 2, pair);
 
 		ptr_t& ptr = ptr_at(pair.first);
 
 		// need to rebuild if this causes a collision
 		if (!ptr) return rebuild_and_insert(m_capacity, pair);
 
-		++m_num_keys;
+		++m_num_pairs;
 
 		// under capacity and collision-free, so simply insert
 		ptr.reset(new pair_t(pair));
