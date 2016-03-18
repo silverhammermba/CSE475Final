@@ -41,14 +41,22 @@ class PerfectTable
 		return m_table.at(m_hash(key));
 	}
 
-public:
-	PerfectTable(const pair_t& pair)
-		: m_test_table(1, false),
-		m_hash([](ktype) { return 0; })
+	// calculate the necessary table size for the current capacity
+	inline size_t calculate_size() const
 	{
-		m_table.emplace_back(new pair_t(pair));
-		m_num_pairs = 1;
-		m_capacity = m_num_pairs * 2;
+		return 2 * m_capacity * (m_capacity - 1);
+	}
+
+public:
+	PerfectTable(size_t capacity = 2)
+	{
+		m_num_pairs = 0;
+		m_capacity = capacity;
+
+		size_t size = calculate_size();
+		m_table.resize(size);
+		m_test_table.resize(size);
+		m_hash = random_hash(size);
 	}
 
 	// rebuild the hash table with capacity new_capacity and add pair to it
@@ -59,8 +67,8 @@ public:
 
 		++m_num_pairs;
 
-		m_capacity = std::max(m_num_pairs, new_capacity);
-		size_t new_size = 2 * m_capacity * (m_capacity - 1);
+		m_capacity = std::max(2 * m_num_pairs, new_capacity);
+		size_t new_size = calculate_size();
 
 		m_test_table.resize(new_size);
 
