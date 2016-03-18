@@ -85,23 +85,34 @@ public:
 				for (auto& ptr : m_table)
 				{
 					if (!ptr) continue;
+
 					auto hashed_key = m_hash(ptr->first);
 					if (m_test_table.at(hashed_key))	// check if collision with new hash fcn
 					{
 						is_collision_free = false;
 						break;
 					}
-					else
-					{
-						m_test_table[hashed_key] = true;
-					}
+
+					m_test_table[hashed_key] = true;
 				}
 
 				if (is_collision_free) break;
 			}
 
-			// rehash table using moves
-			// hash new key and add
+			// move old hash table to temp table
+			table_t old_table = std::move(m_table);
+			m_table.resize(table_size); // should be filled with nulls
+
+			// insert new pair
+			m_table[m_hash(pair.first)] = std::make_unique<pair_t>(pair);
+
+			// rehash old pairs
+			for (auto& ptr : old_table)
+			{
+				if (!ptr) continue;
+
+				m_table[m_hash(ptr->first)] = std::move(ptr);
+			}
 
 			return true;
 		}
