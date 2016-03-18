@@ -53,10 +53,10 @@ public:
 		m_num_pairs = 0;
 		m_capacity = capacity;
 
-		size_t size = calculate_size();
-		m_table.resize(size);
-		m_test_table.resize(size);
-		m_hash = random_hash(size);
+		size_t new_size = calculate_size();
+		m_table.resize(new_size);
+		m_test_table.resize(new_size);
+		m_hash = random_hash(new_size);
 	}
 
 	size_t size() const
