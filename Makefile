@@ -1,4 +1,4 @@
-CXXFLAGS=-std=c++11 -Wall -Wextra -Wfatal-errors -ggdb
+CXXFLAGS=-std=c++14 -Wall -Wextra -Wfatal-errors -ggdb
 SRC=$(wildcard *.cpp)
 OBJ=$(subst .cpp,.o,$(SRC))
 BIN=main
