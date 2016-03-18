@@ -59,6 +59,11 @@ public:
 		m_hash = random_hash(size);
 	}
 
+	size_t size() const
+	{
+		return m_num_pairs;
+	}
+
 	// rebuild the hash table with capacity new_capacity and add pair to it
 	bool rebuild_and_insert(size_t new_capacity, const pair_t& pair)
 	{
