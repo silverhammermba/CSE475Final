@@ -29,7 +29,7 @@ hash_t gen_random_hash_func(size_t m)
 	return [m,p,a,b](ktype k) { return ((a * k + b) % p) % m; };
 }
 
-class STable
+class PerfectTable
 {
 	typedef std::pair<ktype, vtype> pair_t;
 	typedef std::unique_ptr<pair_t> ptr_t;
@@ -51,7 +51,7 @@ class STable
 	}
 
 public:
-	STable(const pair_t& pair)
+	PerfectTable(const pair_t& pair)
 		: m_test_table(1, false),
 		m_hash([](ktype) { return 0; })
 	{
@@ -77,7 +77,7 @@ public:
 			while (true)
 			{
 				bool is_collision_free = true;
-				
+
 				std::fill(m_test_table.begin(), m_test_table.end(), false);
 				m_hash = gen_random_hash_func(table_size);
 				

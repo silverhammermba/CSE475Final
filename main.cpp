@@ -4,7 +4,7 @@ int main(int, char**)
 {
 	try
 	{
-		STable table(std::make_pair(3, 6));
+		PerfectTable table(std::make_pair(3, 6));
 		auto c = table.count(3);
 		auto c2 = table.count(4);
 		auto v = table.at(3);
