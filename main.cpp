@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "fastmap.h"
 
 int main(int, char**)
@@ -5,17 +7,25 @@ int main(int, char**)
 	try
 	{
 		PerfectTable table;
+		std::cout << table.size() << std::endl;
+
+		std::cout << table.count(3) << std::endl;
 		table.insert(std::make_pair(3, 6));
-		auto c = table.count(3);
-		auto c2 = table.count(4);
-		auto v = table.at(3);
-		auto b = table.erase(3);
-		auto b2 = table.erase(3);
+		std::cout << table.size() << std::endl;
+
+		std::cout << table.count(3) << std::endl;
+		std::cout << table.at(3) << std::endl;
+		std::cout << table.erase(3) << std::endl;
+		std::cout << table.erase(3) << std::endl;
+		std::cout << table.count(3) << std::endl;
 	}
 	catch (...)
 	{
-		return EXIT_FAILURE;
+		std::cout << "error\n";
 	}
+
+	for (int i = 0; i < 10; ++i)
+		std::cout << random_prime_at_least(2) << std::endl;
 
 	return EXIT_SUCCESS;
 }
