@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -152,7 +153,7 @@ public:
 	}
 
 	// return 1 if pair matching key is in table, else return 0
-	int count(const ktype& key) const
+	size_t count(const ktype& key) const
 	{
 		const ptr_t& ptr = ptr_at(key);
 		return ptr && ptr->first == key;
