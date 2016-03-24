@@ -27,7 +27,7 @@ class PerfectTable
 	table_t m_table;                // internal hash table
 	std::vector<bool> m_test_table; // table for testing for collision
 	hash_t m_hash;                  // hash function
-	size_t m_capacity;              // how many pairs can be stored with rebuilding
+	size_t m_capacity;              // how many pairs can be stored without rebuilding
 	size_t m_num_pairs;             // how many pairs are currently stored
 
 	// convenience functions for getting the unique_ptr for a key
@@ -48,10 +48,10 @@ class PerfectTable
 	}
 
 public:
-	PerfectTable(size_t capacity = 2)
+	PerfectTable(size_t min_capacity = 2)
 	{
 		m_num_pairs = 0;
-		m_capacity = capacity;
+		m_capacity = std::max(min_capacity, 2);
 
 		size_t new_size = calculate_size();
 		m_table.resize(new_size);

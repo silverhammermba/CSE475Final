@@ -3,6 +3,7 @@
 // return a random unsigned int >= min and <= max if provided
 unsigned int random_uint(unsigned int min, unsigned int max=std::numeric_limits<unsigned int>::max())
 {
+	// TODO thread-safe?
 	static std::random_device random_device;
 	static std::mt19937 generator(random_device());
 
