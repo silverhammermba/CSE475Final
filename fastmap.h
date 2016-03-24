@@ -1,3 +1,4 @@
+#pragma once
 
 #include <functional>
 #include <memory>
@@ -48,26 +49,10 @@ class PerfectTable
 		return 2 * m_capacity * (m_capacity - 1);
 	}
 
-public:
-	PerfectTable(size_t min_capacity = 2)
+	void rebuild_table()
 	{
-		m_num_pairs = 0;
-		m_capacity = std::max(min_capacity, 2);
-
-		size_t new_size = calculate_size();
-		m_table.resize(new_size);
-		m_test_table.resize(new_size);
-		m_hash = random_hash(new_size);
-	}
-
-	size_t size() const
-	{
-		return m_num_pairs;
-	}
-
-	bool rebuild_table(size_t new_capacity)
-	{
-		m_capacity = std::max(2 * m_num_pairs, new_capacity);
+		// if we're over capacity, double it
+		while (m_num_pairs > m_capacity) m_capacity *= 2;
 		size_t new_size = calculate_size();
 
 		m_test_table.resize(new_size);
@@ -108,8 +93,23 @@ public:
 
 			m_table[m_hash(ptr->first)] = std::move(ptr);
 		}
+	}
 
-		return true;
+public:
+	PerfectTable(size_t min_capacity = 2)
+	{
+		m_num_pairs = 0;
+		m_capacity = std::max(min_capacity, (size_t)2);
+
+		size_t new_size = calculate_size();
+		m_table.resize(new_size);
+		m_test_table.resize(new_size);
+		m_hash = random_hash(new_size);
+	}
+
+	size_t size() const
+	{
+		return m_num_pairs;
 	}
 
 	// try to insert pair into the hash table, rebuilding if necessary
@@ -118,23 +118,15 @@ public:
 		// key already exists, regardless of value
 		if (count(pair.first)) return false;
 
-		++m_num_keys;
-
-		// if we need to grow the table
-		if (m_num_keys > m_capacity)
-		{
-			m_table.emplace_back(new pair_t(pair));
-			rebuild_table(m_capacity * 2);
-			return true;
-		}
+		++m_num_pairs;
 
 		ptr_t& ptr = ptr_at(pair.first);
 
-		// if there is a collision
-		if (ptr)
+		// if we're over capacity or there is a collision, rebuild the table
+		if (m_num_pairs > m_capacity || ptr)
 		{
 			m_table.emplace_back(new pair_t(pair));
-			rebuild_table(m_capacity);
+			rebuild_table();
 			return true;
 		}
 
@@ -161,7 +153,6 @@ public:
 	// return 1 if pair matching key is in table, else return 0
 	int count(const ktype& key) const
 	{
-		if (m_table.size() == 0) return 0;	// Hash function should be invalid if no table
 		const ptr_t& ptr = ptr_at(key);
 		return ptr && ptr->first == key;
 	}

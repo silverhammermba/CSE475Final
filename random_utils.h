@@ -1,3 +1,5 @@
+#pragma once
+
 #include <random>
 
 // return a random unsigned int >= min and <= max if provided
