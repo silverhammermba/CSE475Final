@@ -1,8 +1,17 @@
+#include "fastmap.h"
 
-//#define APPLICATION
-//#define GMOCK_TESTING
+#ifdef TESTING
 
-#if defined(APPLICATION)
+#include "test.h"
+#include "test_fastmap.h"
+
+int main(int argc, char **argv)
+{
+	::testing::InitGoogleTest(&argc, argv);
+	return RUN_ALL_TESTS();
+}
+
+#else
 
 #include "fastmap.h"
 
@@ -24,19 +33,6 @@ int main(int, char**)
 	}
 
 	return EXIT_SUCCESS;
-}
-
-#elif defined(GMOCK_TESTING)
-
-#include "fastmap.h"
-#include "my_gmock.h"
-
-using namespace ::testing;
-
-int main(int argc, char **argv)
-{
-	testing::InitGoogleMock(&argc, argv);
-	return RUN_ALL_TESTS();
 }
 
 #endif
