@@ -16,7 +16,7 @@ TEST_F(APerfectTable, ContainsNoElementThatWasntAdded)
 {
 	ktype k{ 5 };
 	EXPECT_EQ(m_perfect_table.count(k), 0u);
-	EXPECT_THROW(m_perfect_table.at(k), std::exception);
+	EXPECT_THROW(m_perfect_table.at(k), std::out_of_range);
 }
 
 //TEST_F(APerfectTable, ContainsTheElementThatWasAdded)

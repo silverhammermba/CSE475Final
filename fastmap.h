@@ -147,6 +147,7 @@ public:
 	// return the value matching key
 	const vtype& at(const ktype& key) const
 	{
+		if (!count(key)) throw std::out_of_range("PerfectTable::at");
 		return ptr_at(key)->second;
 	}
 
