@@ -1,3 +1,4 @@
+
 #include <functional>
 #include <memory>
 #include <utility>
@@ -5,7 +6,6 @@
 
 typedef int vtype;
 typedef int ktype;
-
 typedef std::function<size_t(ktype)> hash_t;
 
 unsigned int random_prime_at_least(size_t m)
@@ -31,6 +31,7 @@ hash_t gen_random_hash_func(size_t m)
 
 class PerfectTable
 {
+public:
 	typedef std::pair<ktype, vtype> pair_t;
 	typedef std::unique_ptr<pair_t> ptr_t;
 	typedef std::vector<ptr_t> table_t;
@@ -51,7 +52,13 @@ class PerfectTable
 		return m_table.at(m_hash(key));
 	}
 
-public:
+//public:
+	PerfectTable()
+		:m_hash([](ktype) { throw std::exception(); return 0; }), // table and test_table initially size 0 
+		m_num_keys(0),
+		m_capacity(0)
+	{
+	}
 	PerfectTable(const pair_t& pair)
 		: m_test_table(1, false),
 		m_hash([](ktype) { return 0; })
@@ -61,7 +68,7 @@ public:
 		m_capacity = m_num_keys * 2;
 	}
 
-	void rebuild_and_add(size_t new_capacity, const pair_t& pair)
+	void rebuild_table(size_t new_capacity)
 	{
 		m_capacity = new_capacity;
 		size_t new_size = 2 * m_capacity * (m_capacity - 1);
@@ -75,7 +82,6 @@ public:
 			std::fill(m_test_table.begin(), m_test_table.end(), false);
 			m_hash = gen_random_hash_func(new_size);
 
-			m_test_table[m_hash(pair.first)] = true;	// guaranteed to be false initially
 			for (auto& ptr : m_table)
 			{
 				if (!ptr) continue;
@@ -97,9 +103,6 @@ public:
 		table_t old_table = std::move(m_table);
 		m_table.resize(new_size);
 
-		// insert new pair
-		m_table[m_hash(pair.first)] = std::make_unique<pair_t>(pair);
-
 		// rehash old pairs
 		for (auto& ptr : old_table)
 		{
@@ -111,7 +114,7 @@ public:
 
 	bool insert(const pair_t& pair)
 	{
-		// already exists
+		// key already exists, regardless of value
 		if (count(pair.first)) return false;
 
 		++m_num_keys;
@@ -119,28 +122,30 @@ public:
 		// if we need to grow the table
 		if (m_num_keys > m_capacity)
 		{
-			rebuild_and_add(m_capacity * 2, pair);
+			m_table.emplace_back(new pair_t(pair));
+			rebuild_table(m_capacity * 2);
 			return true;
 		}
 
 		ptr_t& ptr = ptr_at(pair.first);
 
 		// if there is a collision
-		if (!ptr)
+		if (ptr)
 		{
-			rebuild_and_add(m_capacity, pair);
+			m_table.emplace_back(new pair_t(pair));
+			rebuild_table(m_capacity);
 			return true;
 		}
 
 		// no collision, no over capacity
-		ptr.reset(new pair_t(pair));
+		ptr = std::make_unique<pair_t>(pair);
 
 		return true;
 	}
 
 	size_t erase(const ktype& key)
 	{
-		if (!count(key)) return 0;
+		if (!count(key)) return false;
 		m_table[m_hash(key)].reset();
 		return 1;
 	}
@@ -153,7 +158,50 @@ public:
 
 	int count(const ktype& key) const
 	{
+		if (m_table.size() == 0) return 0;	// Hash function should be invalid if no table
 		const ptr_t& ptr = ptr_at(key);
 		return ptr && ptr->first == key;
 	}
 };
+
+#if defined(GMOCK_TESTING)
+
+#include "my_gmock.h"
+
+using namespace ::testing;
+
+class APerfectTable : public Test
+{
+public:
+	PerfectTable m_perfect_table;
+
+};
+
+TEST_F(APerfectTable, IsEmptyWhenCreated) {
+	ASSERT_THAT(m_perfect_table.m_num_keys, Eq(0u));
+	ASSERT_THAT(m_perfect_table.m_table.size(), Eq(0u));
+}
+TEST_F(APerfectTable, ContainsNoElementThatWasntAdded) {
+	ktype k{ 5 };
+	ASSERT_THAT(m_perfect_table.count(k), Eq(0u));
+	ASSERT_THROW(m_perfect_table.at(k), std::exception);
+}
+
+//TEST_F(APerfectTable, ContainsTheElementThatWasAdded) {
+//
+//	pair_t p(3, 5);
+//	ASSERT_THAT(m_perfect_table.count(, Eq(0u));
+//}
+
+	// table has no keys at start
+	// COUNT a key that doesn't exist returns zero
+// COUNT a key that exists returns one
+// AT a key that exists returns value
+// AT a key that doesn't exist throws
+// ERASE a key that exists removes key, decrements num_keys, and returns one
+// ERASE a key that doesn't exist does nothing to vector or num_keys, and returns zero
+// INSERT duplicate key and same value returns false
+// INSERT duplicate key and different value returns false
+// Capacity is twice the num keys
+
+#endif
