@@ -58,7 +58,7 @@ class PerfectTable
 			if (!entry_ptr) continue;
 
 			K hashed_key = m_hash(entry_ptr->first);
-			if (collision_map.at(hashed_key)) return true;
+			if (collision_map.at(hashed_key)) return false;
 
 			collision_map[hashed_key] = true;
 		}
