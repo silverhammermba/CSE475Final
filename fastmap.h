@@ -11,8 +11,13 @@
 template<class K, class V>
 class PerfectTable
 {
+	typedef std::function<size_t(K)> hash_t;
+	typedef std::pair<K, V> pair_t;
+	typedef std::unique_ptr<pair_t> ptr_t;
+	typedef std::vector<ptr_t> table_t;
+
 	// return a random hash function onto [0, range)
-	static std::function<size_t(K)> random_hash(size_t range)
+	static hash_t random_hash(size_t range)
 	{
 		unsigned int p = random_prime_at_least(range);
 		unsigned int a = random_uint(1, p - 1);
@@ -21,14 +26,10 @@ class PerfectTable
 		return [range,p,a,b](K key) { return ((a * key + b) % p) % range; };
 	}
 
-	typedef std::pair<K, V> pair_t;
-	typedef std::unique_ptr<pair_t> ptr_t;
-	typedef std::vector<ptr_t> table_t;
-
-	table_t m_table;                 // internal hash table
-	std::function<size_t(K)> m_hash; // hash function
-	size_t m_capacity;               // how many pairs can be stored without rebuilding
-	size_t m_num_pairs;              // how many pairs are currently stored
+	table_t m_table;    // internal hash table
+	hash_t m_hash;      // hash function
+	size_t m_capacity;  // how many pairs can be stored without rebuilding
+	size_t m_num_pairs; // how many pairs are currently stored
 
 	// convenience functions for getting the unique_ptr for a key
 	inline ptr_t& ptr_at(const K& key)
