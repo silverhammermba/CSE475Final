@@ -160,4 +160,9 @@ public:
 		const ptr_t& ptr = ptr_at(key);
 		return ptr && ptr->first == key;
 	}
+
+	hash_t hash_function() const
+	{
+		return m_hash;
+	}
 };

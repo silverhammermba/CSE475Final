@@ -51,16 +51,15 @@ TEST_F(APerfectTable, CanInsertManyPairs)
 	for (size_t i = 0; i < count; ++i)
 		pairs.push_back(std::make_pair(i, -i));
 
-	for (const auto& pair : pairs)
-		ASSERT_EQ(true, m_table.insert(pair));
+	for (const auto& pair : pairs) ASSERT_EQ(true, m_table.insert(pair));
 
 	// table rebuilds during inserts, so only tests elements after all inserts complete
+
+	EXPECT_EQ(count, m_table.size());
 
 	for (const auto& pair : pairs)
 	{
 		EXPECT_EQ(1u, m_table.count(pair.first));
 		EXPECT_EQ(pair.second, m_table.at(pair.first));
 	}
-
-	EXPECT_EQ(count, m_table.size());
 }
