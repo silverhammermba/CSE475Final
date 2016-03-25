@@ -49,9 +49,9 @@ class PerfectTable
 	}
 
 	// check if the current hash function has no collisions
-	bool is_hash_perfect() const
+	bool is_hash_perfect(size_t new_table_size) const
 	{
-		std::vector<bool> collision_map(m_table.size(), false);
+		std::vector<bool> collision_map(new_table_size, false);
 
 		for (const auto& entry_ptr : m_table)
 		{
@@ -93,7 +93,7 @@ class PerfectTable
 		{
 			m_hash = random_hash(new_table_size);
 		}
-		while (!is_hash_perfect());
+		while (!is_hash_perfect(new_table_size));
 
 		rehash_table(new_table_size);
 	}
