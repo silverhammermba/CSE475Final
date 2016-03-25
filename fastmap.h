@@ -141,6 +141,7 @@ public:
 	size_t erase(const ktype& key)
 	{
 		if (!count(key)) return 0;
+		--m_num_pairs;
 		m_table[m_hash(key)].reset();
 		return 1;
 	}
