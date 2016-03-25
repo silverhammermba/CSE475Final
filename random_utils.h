@@ -28,12 +28,12 @@ bool is_prime(unsigned int p)
 	return true;
 }
 
-// return a random prime >= m
-unsigned int random_prime_at_least(unsigned int m)
+// return a random prime >= min
+unsigned int random_prime_at_least(unsigned int min)
 {
 	while (true)
 	{
-		unsigned int p = random_uint(m);
+		unsigned int p = random_uint(min);
 		if (!is_prime(p)) continue;
 		return p;
 	}
