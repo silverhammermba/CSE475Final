@@ -4,35 +4,39 @@
 class APerfectTable : public ::testing::Test
 {
 public:
-	PerfectTable m_perfect_table;
+	PerfectTable m_table;
 };
 
 TEST_F(APerfectTable, IsEmptyWhenCreated)
 {
-	EXPECT_EQ(m_perfect_table.size(), 0u);
+	EXPECT_EQ(0u, m_table.size());
 }
 
-TEST_F(APerfectTable, ContainsNoElementThatWasntAdded)
+TEST_F(APerfectTable, CannotAccessMissingElement)
 {
-	ktype k{ 5 };
-	EXPECT_EQ(m_perfect_table.count(k), 0u);
-	EXPECT_THROW(m_perfect_table.at(k), std::out_of_range);
+	ktype k {5};
+	EXPECT_EQ(0u, m_table.count(k));
+	EXPECT_THROW(m_table.at(k), std::out_of_range);
 }
 
-//TEST_F(APerfectTable, ContainsTheElementThatWasAdded)
-//{
-//
-//	pair_t p(3, 5);
-//	ASSERT_THAT(m_perfect_table.count(, Eq(0u));
-//}
+TEST_F(APerfectTable, CanInsertElement)
+{
+	ktype k {5};
+	vtype v {6};
+	ASSERT_EQ(true, m_table.insert(std::make_pair(k, v)));
+	EXPECT_EQ(1u, m_table.size());
+	EXPECT_EQ(1u, m_table.count(k));
+	EXPECT_EQ(v, m_table.at(k));
+}
 
-	// table has no keys at start
-	// COUNT a key that doesn't exist returns zero
-// COUNT a key that exists returns one
-// AT a key that exists returns value
-// AT a key that doesn't exist throws
-// ERASE a key that exists removes key, decrements num_keys, and returns one
-// ERASE a key that doesn't exist does nothing to vector or num_keys, and returns zero
-// INSERT duplicate key and same value returns false
-// INSERT duplicate key and different value returns false
-// Capacity is twice the num keys
+TEST_F(APerfectTable, CanEraseElement)
+{
+	ktype k {5};
+	ASSERT_EQ(0u, m_table.erase(k));
+
+	m_table.insert(std::make_pair(k, k + 1));
+
+	EXPECT_EQ(1u, m_table.erase(k));
+	EXPECT_EQ(0u, m_table.count(k));
+	EXPECT_EQ(0u, m_table.size());
+}
