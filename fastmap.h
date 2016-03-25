@@ -66,6 +66,21 @@ class PerfectTable
 		return true;
 	}
 
+	// rehash each pair in the table (pointless if the hash hasn't changed)
+	void rehash_table(size_t new_table_size)
+	{
+		table_t old_table = std::move(m_table);
+		m_table.resize(new_table_size);
+
+		// rehash old pairs
+		for (auto& ptr : old_table)
+		{
+			if (!ptr) continue;
+
+			m_table[m_hash(ptr->first)] = std::move(ptr);
+		}
+	}
+
 	// reconstruct the table with a new perfect hash function
 	// (e.g. if there is a collision or we're over capacity)
 	void rebuild_table()
@@ -80,7 +95,7 @@ class PerfectTable
 		}
 		while (!is_hash_perfect());
 
-		rehash(new_table_size);
+		rehash_table(new_table_size);
 	}
 
 public:
@@ -144,20 +159,5 @@ public:
 	{
 		const ptr_t& ptr = ptr_at(key);
 		return ptr && ptr->first == key;
-	}
-
-	// rehash each pair in the table (pointless if the hash hasn't changed)
-	void rehash(size_t count)
-	{
-		table_t old_table = std::move(m_table);
-		m_table.resize(count);
-
-		// rehash old pairs
-		for (auto& ptr : old_table)
-		{
-			if (!ptr) continue;
-
-			m_table[m_hash(ptr->first)] = std::move(ptr);
-		}
 	}
 };
