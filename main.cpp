@@ -5,12 +5,13 @@
 #if defined(APPLICATION)
 
 #include "fastmap.h"
+#include "top_level_table.h"
 
 int main(int, char**)
 {
 	try
 	{
-		PerfectTable table(std::make_pair(3, 6));
+		PerfectTable table;
 		auto c = table.count(3);
 		auto c2 = table.count(4);
 		auto v = table.at(3);
