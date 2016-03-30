@@ -10,7 +10,7 @@ BIN=main
 $(BIN): $(OBJ)
 	$(CXX) $(LDFLAGS) -o $@ $+ $(LDLIBS)
 
-main.o: fastmap.h random_utils.h test.h test_fastmap.h
+main.o: fast_map.h perfect_table.h random_utils.h gtest_include.h test_fast_map.h
 
 clean:
 	$(RM) $(OBJ) $(BIN)

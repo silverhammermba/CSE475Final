@@ -1,6 +1,6 @@
 
-#include "test.h"
-#include "test_fastmap.h"
+#include "gtest_include.h"
+#include "perfect_table.h"
 
 int main(int argc, char **argv)
 {

@@ -1,6 +1,6 @@
 
-#include "fastmap.h"
-#include "test.h"
+#include "perfect_table.h"
+#include "gtest_include.h"
 
 template <class K, class V>
 class FastMap

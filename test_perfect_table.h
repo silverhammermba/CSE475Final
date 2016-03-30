@@ -1,7 +1,7 @@
 #include <vector>
 
-#include "test.h"
-#include "fastmap.h"
+#include "gtest_include.h"
+#include "perfect_table.h"
 
 class APerfectTable : public ::testing::Test
 {
