@@ -1,6 +1,6 @@
 #pragma once
-#ifndef FASTMAP_H
-#define FASTMAP_H
+#ifndef PERFECT_TABLE_H
+#define PERFECT_TABLE_H
 
 #include <algorithm>
 #include <functional>
@@ -17,17 +17,7 @@ class PerfectTable
 	typedef std::pair<K, V> pair_t;
 	typedef std::unique_ptr<pair_t> ptr_t;
 	typedef std::vector<ptr_t> table_t;
-
-	// return a random hash function onto [0, range)
-	static hash_t random_hash(unsigned int range)
-	{
-		unsigned int p = random_prime_at_least(range);
-		unsigned int a = random_uint(1, p - 1);
-		unsigned int b = random_uint(0, p - 1);
-
-		return [range,p,a,b](K key) { return ((a * key + b) % p) % range; };
-	}
-
+	
 	table_t m_table;    // internal hash table
 	hash_t m_hash;      // hash function
 	size_t m_capacity;  // how many pairs can be stored without rebuilding
@@ -93,22 +83,21 @@ class PerfectTable
 
 		do
 		{
-			m_hash = random_hash(unsigned int(new_table_size));
-		}
-		while (!is_hash_perfect(new_table_size));
+			m_hash = random_hash<K>(unsigned int(new_table_size));
+		} while (!is_hash_perfect(new_table_size));
 
 		rehash_table(new_table_size);
 	}
 
 public:
 	PerfectTable(size_t min_capacity = 2)
-		: m_num_pairs {0}
+		: m_num_pairs{ 0 }
 	{
 		m_capacity = std::max(size_t(2), min_capacity);
 		auto new_table_size = calculate_table_size();
 
 		m_table.resize(new_table_size);
-		m_hash = random_hash(unsigned int(new_table_size));
+		m_hash = random_hash<K>(unsigned int(new_table_size));
 	}
 
 	size_t size() const

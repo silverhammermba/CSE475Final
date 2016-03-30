@@ -1,4 +1,6 @@
 #pragma once
+#ifndef GTEST_H
+#define GTEST_H
 
 #ifdef _WIN32 // supress warnings on Windows
 #pragma warning (push)
@@ -7,4 +9,6 @@
 #pragma warning( pop)
 #else
 #include <gtest/gtest.h>
+#endif
+
 #endif

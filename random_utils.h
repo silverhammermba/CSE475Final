@@ -41,4 +41,15 @@ unsigned int random_prime_at_least(unsigned int min)
 	}
 }
 
+// return a random hash function onto [0, range)
+template <class K>
+std::function<size_t(K)> random_hash(unsigned int range)
+{
+	unsigned int p = random_prime_at_least(range);
+	unsigned int a = random_uint(1, p - 1);
+	unsigned int b = random_uint(0, p - 1);
+
+	return [range, p, a, b](K key) { return ((a * key + b) % p) % range; };
+}
+
 #endif

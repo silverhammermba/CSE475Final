@@ -1,30 +1,30 @@
 #pragma once
-#ifndef TEST_PERFECT_TABLE_H
-#define TEST_PERFECT_TABLE_H
+#ifndef TEST_FAST_MAP_H
+#define TEST_FAST_MAP_H
 
 #include <vector>
+#include "fast_map.h"
 #include "gtest_include.h"
-#include "perfect_table.h"
 
-class APerfectTable : public ::testing::Test
+class AFastMap : public ::testing::Test
 {
 public:
-	PerfectTable<int, int> m_table;
+	FastMap<int, int> m_table;
 };
 
-TEST_F(APerfectTable, IsEmptyWhenCreated)
+TEST_F(AFastMap, IsEmptyWhenCreated)
 {
 	EXPECT_EQ(0u, m_table.size());
 }
 
-TEST_F(APerfectTable, CannotAccessMissingPair)
+TEST_F(AFastMap, CannotAccessMissingPair)
 {
 	int k{ 5 };
 	EXPECT_EQ(0u, m_table.count(k));
 	EXPECT_THROW(m_table.at(k), std::out_of_range);
 }
 
-TEST_F(APerfectTable, CanInsertPair)
+TEST_F(AFastMap, CanInsertPair)
 {
 	int k{ 5 };
 	int v{ 6 };
@@ -34,7 +34,7 @@ TEST_F(APerfectTable, CanInsertPair)
 	EXPECT_EQ(v, m_table.at(k));
 }
 
-TEST_F(APerfectTable, CanErasePair)
+TEST_F(AFastMap, CanErasePair)
 {
 	int k{ 5 };
 	ASSERT_EQ(0u, m_table.erase(k));
@@ -46,11 +46,11 @@ TEST_F(APerfectTable, CanErasePair)
 	EXPECT_EQ(0u, m_table.size());
 }
 
-TEST_F(APerfectTable, CanInsertManyPairs)
+TEST_F(AFastMap, CanInsertManyPairs)
 {
 	size_t count = 1000;
 
-	std::vector<std::pair<int, int>> pairs;
+	std::vector<std::pair<int,int>> pairs;
 	for (size_t i = 0; i < count; ++i)
 		pairs.push_back(std::make_pair(int(i), -int(i)));
 
