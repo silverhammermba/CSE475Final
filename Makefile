@@ -1,4 +1,6 @@
-CXXFLAGS=-std=c++14 -Wall -Wextra -Wfatal-errors -ggdb
+CXXFLAGS=-std=c++14 -Wall -Wextra -Wfatal-errors -ggdb -Igoogletest/googletest/include
+LDFLAGS=-Lgoogletest/googlemock/gtest
+LDLIBS=-lpthread -lgtest
 SRC=$(wildcard *.cpp)
 OBJ=$(subst .cpp,.o,$(SRC))
 BIN=main
@@ -8,7 +10,7 @@ BIN=main
 $(BIN): $(OBJ)
 	$(CXX) $(LDFLAGS) -o $@ $+ $(LDLIBS)
 
-main.o: fastmap.h random_utils.h
+main.o: fastmap.h random_utils.h test.h test_fastmap.h
 
 clean:
 	$(RM) $(OBJ) $(BIN)

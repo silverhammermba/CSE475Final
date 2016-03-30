@@ -1,10 +1,11 @@
 
 #include "fastmap.h"
-#include "my_gmock.h"
+#include "test.h"
 
+template <class K, class V>
 class FastMap
 {
-	typedef std::unique_ptr<PerfectTable> ptr_t;
+	typedef std::unique_ptr<PerfectTable<K, V>> ptr_t;
 	typedef std::vector<ptr_t> table_t;
 public:
 	FastMap()

@@ -5,7 +5,7 @@
 #include <random>
 
 // return a random unsigned int >= min and <= max if provided
-inline unsigned int random_uint(unsigned int min, unsigned int max=std::numeric_limits<unsigned int>::max())
+unsigned int random_uint(unsigned int min, unsigned int max = std::numeric_limits<unsigned int>::max())
 {
 	// TODO thread-safe?
 	static std::random_device random_device;
@@ -16,13 +16,13 @@ inline unsigned int random_uint(unsigned int min, unsigned int max=std::numeric_
 }
 
 // test if p is prime
-inline bool is_prime(unsigned int p)
+bool is_prime(unsigned int p)
 {
 	if (p < 2) return false;
 	if (p == 2) return true;
 	if (p % 2 == 0) return false;
 
-	for (unsigned int i = 3; (i * i) <= p; i += 2)
+	for (size_t i = 3; (i * i) <= p; i += 2)
 	{
 		if (p % i == 0) return false;
 	}
@@ -30,12 +30,12 @@ inline bool is_prime(unsigned int p)
 	return true;
 }
 
-// return a random prime >= m
-inline unsigned int random_prime_at_least(unsigned int m)
+// return a random prime >= min
+unsigned int random_prime_at_least(unsigned int min)
 {
 	while (true)
 	{
-		unsigned int p = random_uint(m);
+		unsigned int p = random_uint(min);
 		if (!is_prime(p)) continue;
 		return p;
 	}

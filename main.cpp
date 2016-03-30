@@ -1,42 +1,9 @@
 
-//#define APPLICATION
-//#define GMOCK_TESTING
-
-#if defined(APPLICATION)
-
-#include "fastmap.h"
-#include "top_level_table.h"
-
-int main(int, char**)
-{
-	try
-	{
-		PerfectTable table;
-		auto c = table.count(3);
-		auto c2 = table.count(4);
-		auto v = table.at(3);
-		auto b = table.erase(3);
-		auto b2 = table.erase(3);
-	}
-	catch (...)
-	{
-		int i = 0;
-	}
-
-	return EXIT_SUCCESS;
-}
-
-#elif defined(GMOCK_TESTING)
-
-#include "fastmap.h"
-#include "my_gmock.h"
-
-using namespace ::testing;
+#include "test.h"
+#include "test_fastmap.h"
 
 int main(int argc, char **argv)
 {
-	testing::InitGoogleMock(&argc, argv);
+	::testing::InitGoogleTest(&argc, argv);
 	return RUN_ALL_TESTS();
 }
-
-#endif
