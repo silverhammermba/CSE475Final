@@ -34,8 +34,8 @@ public:
 	// try to insert pair into the hash table
 	bool insert(const pair_t& pair)
 	{
-		auto& ptr = ptr_at(pair.first);
-		if (!ptr) ptr_at(pair.first) = std::make_unique<PerfectTable<K,V>>();
+		auto& ptr = ptrAt(pair.first);
+		if (!ptr) ptrAt(pair.first) = std::make_unique<PerfectTable<K,V>>();
 		auto ret = ptr->insert(pair);
 		if (ret) ++m_num_pairs;
 		return ret;
@@ -44,7 +44,7 @@ public:
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
-		auto& ptr = ptr_at(key);
+		auto& ptr = ptrAt(key);
 		auto ret = !ptr ? 0 : ptr->erase(key);
 		if (ret) --m_num_pairs;
 		return ret;
@@ -54,31 +54,68 @@ public:
 	V at(const K& key) const
 	{
 		if (!count(key)) throw std::out_of_range("FastMap::at");
-		auto& ptr = ptr_at(key);
+		auto& ptr = ptrAt(key);
 		return !ptr ? 0 : ptr->at(key);
 	}
 
 	// return 1 if pair matching key is in table, else return 0
 	size_t count(const K& key) const
 	{
-		auto& ptr = ptr_at(key);
+		auto& ptr = ptrAt(key);
 		return !ptr ? 0 : ptr->count(key);
 	}
 
 private:
 	// convenience functions for getting the unique_ptr for a key
-	inline ptr_t& ptr_at(const K& key)
+	inline ptr_t& ptrAt(const K& key)
 	{
 		return m_table.at(m_hash(key));
 	}
 
-	inline const ptr_t& ptr_at(const K& key) const
+	inline const ptr_t& ptrAt(const K& key) const
 	{
 		return m_table.at(m_hash(key));
 	}
-
-	void move_table_to_list(table_t& table, element_list_t& list)
+	
+	void fullRehash(table_t& table, size_t num_elements, size_t c)
 	{
+		fullRehash(table, num_elements, c, nullptr);
+	}
+	hash_t fullRehash(table_t& table, size_t num_elements, size_t c, pair_t& new_element)
+	{
+		element_list_t element_list;
+		std::vector<size_t> hash_distribution;
+		hashed_element_list_t hashed_element_list;
+
+		auto num_buckets = table.size();
+
+		moveTableToList(table, element_list, num_elements);
+
+		// If arg new_element exists, push onto list and update count
+		if (new_element != nullptr)
+		{
+			element_list.emplace_back(new_element);
+			++num_elements;
+		}
+
+		auto M = (1 + c) * std::max(num_elements, 4);
+				
+		auto hash = findBalancedHash(element_list, num_buckets, M, hash_distribution);
+
+		hashElementList(element_list, hashed_element_list, hash, hash_distribution);
+
+		// Destruct Perfect Tables and reconstruct via hashed element list
+		for (size_t i = 0; i < table.size(); ++i)
+		{
+			table[i].reset(new PerfectTable(hashed_element_list[i]));
+		}
+
+		return hash;
+	}
+	void moveTableToList(table_t& table, element_list_t& list, size_t num_elements = 0)
+	{
+		if (element_list != 0) element_list.reserve(num_elements);
+
 		for (;;;/*iterate over fast_map buckets*/)
 		{
 			if (;;;/*iterate over perfect_table buckets*/)
@@ -87,76 +124,50 @@ private:
 			}
 		}
 	}
-
-	void full_rehash(/* X */)
+	hash_t findBalancedHash(const element_list_t& element_list, size_t sM, size_t M, std::vector<size_t>& hash_distribution)
 	{
-		element_list_t element_list;
-		element_list.reserve(m_num_pairs + 1);
-		move_table_to_list(m_table, element_list);
-		// push back X
+		size_t sj_sum;
+		hash_distribution.resize(sM);
 
-		auto element_count = element_list.size();
-		m_M = (1 + m_c) * std::max(element_count, 4);
-				
-		// Find balanced hash
-		hash_t hash;
-		auto sM = m_table.size();
-		auto M = m_M;
-		std::vector<size_t> hash_distribution(sM);
+		do
 		{
-			size_t sj_sum;
-			std::vector<size_t> sj(sM);
-			do
+			// Reset variables declared outside loop
+			sj_sum = 0;
+			std::fill(hash_distribution.begin(), hash_distribution.end(), 0);
+			
+			hash = random_hash(sM);
+
+			// Calculate hash distribution
+			for (const auto& x : element_list)
 			{
-				std::fill(hash_distribution.begin(), hash_distribution.end(), 0);
-				hash = random_hash(sM);
-
-				// Find hash distribution
-				for (const auto& x : element_list)
-				{
-					++hash_distribution.at(hash(x->first));
-				}
-
-				// Determine size of resulting sub-tables
-				for (size_t i = 0; i < sM; ++i)
-				{
-					auto bj = hash_distribution[i];		// count of elements in Perfect Table
-					auto mj = 2 * bj;					// capacity of Perfect Table
-					sj[i] = 2 * mj * (mj - 1);			// size of Perfect Table
-				}
-				sj_sum = std::accumulate(sj.cbegin(), sj.cend(), 0);
-
-			} while (sj_sum > 32 * M ^ 2 / (sM + 4 * M));
-		}
-
-		m_hash = hash;
-
-		// Build list of lists
-		// Destruct and rebuild FSK Perfect Table
-
-		// Partition element list into list of hashed element list
-		std::vector<element_list_t> hashed_element_list(m_table.size());
-		// args: hashed_element_list, hash_distribution, element_list, hash
-		{
-			// Resize each hashed element list to its expected count
-			for (size_t i = 0; i < hash_distribution.size(); ++i)
-			{
-				hashed_element_list[i].resize(hash_distribution[i]);
+				++hash_distribution.at(hash(x->first));
 			}
 
-			// Distribute full list over 2D hashed element list
-			for (auto& e : element_list)
+			// Determine size of resulting sub-tables
+			for (size_t i = 0; i < sM; ++i)
 			{
-				hashed_element_list.at(m_hash(e->first)).emplace_back(std::move(e));
+				auto bj = hash_distribution[i];		// count of elements in sub-table
+				auto mj = 2 * bj;					// capacity of sub-table
+				sj_sum += 2 * mj * (mj - 1);		// size of sub-table
 			}
-		}
 
-		// Destruct Perfect Tables and recreate via FSK static method
-		for (size_t i = 0; i < m_table.size(); ++i)
+		} while (sj_sum > 32 * M ^ 2 / (sM + 4 * M));
+	}
+	void hashElementList(element_list_t& element_list, hashed_element_list_t& hashed_element_list, hash_t hash, std::vector<size_t> hash_distribution)
+	{
+		hashed_element_list.resize(hash_distribution.size());
+
+		// Resize each hashed element list to its expected count
+		for (size_t i = 0; i < hash_distribution.size(); ++i)
 		{
-			m_table[i].reset(new PerfectTable(hashed_element_list[i]));
+			hashed_element_list[i].resize(hash_distribution[i]);
 		}
 
+		// Distribute full element list over 2D hashed element list
+		for (auto& e : element_list)
+		{
+			hashed_element_list.at(hash(e->first)).emplace_back(std::move(e));
+		}
 	}
 	
 	table_t m_table;                // internal hash table
