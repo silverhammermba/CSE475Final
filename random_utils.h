@@ -1,4 +1,3 @@
-#pragma once
 #ifndef RANDOM_UTILS_H
 #define RANDOM_UTILS_H
 
@@ -22,7 +21,7 @@ bool is_prime(unsigned int p)
 	if (p == 2) return true;
 	if (p % 2 == 0) return false;
 
-	for (size_t i = 3; (i * i) <= p; i += 2)
+	for (unsigned int i = 3; (i * i) <= p; i += 2)
 	{
 		if (p % i == 0) return false;
 	}
@@ -43,7 +42,7 @@ unsigned int random_prime_at_least(unsigned int min)
 
 // return a random hash function onto [0, range)
 template <class K>
-std::function<size_t(K)> random_hash(unsigned int range)
+std::function<size_t(K)> random_hash(size_t range)
 {
 	unsigned int p = random_prime_at_least(range);
 	unsigned int a = random_uint(1, p - 1);

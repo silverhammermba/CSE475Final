@@ -1,12 +1,19 @@
+#ifndef FAST_MAP_H
+#define FAST_MAP_H
 
-#include "gtest_include.h"
-#include "perfect_table.h"
+#include <functional>
+#include <memory>
+#include <stdexcept>
+#include <utility>
+#include <vector>
+
+#include "fast_lookup_map.h"
 
 template <class K, class V>
 class FastMap
 {
 	typedef std::function<size_t(K)> hash_t;
-	typedef std::unique_ptr<PerfectTable<K, V>> ptr_t;
+	typedef std::unique_ptr<FastLookupMap<K, V>> ptr_t;
 	typedef std::pair<K, V> pair_t;
 	typedef std::vector<ptr_t> table_t;
 public:
@@ -15,8 +22,8 @@ public:
 	{
 		if (num_buckets == 0) throw std::out_of_range("FastMap num_buckets must not be zero");
 		m_table.resize(num_buckets);
-		m_hash = random_hash<K>(unsigned int(num_buckets));
-	}	
+		m_hash = random_hash<K>(num_buckets);
+	}
 	size_t size() const
 	{
 		return m_num_pairs;
@@ -25,7 +32,7 @@ public:
 	bool insert(const pair_t& pair)
 	{
 		auto& ptr = ptr_at(pair.first);
-		if (!ptr) ptr_at(pair.first) = std::make_unique<PerfectTable<K,V>>();
+		if (!ptr) ptr_at(pair.first) = std::make_unique<FastLookupMap<K,V>>();
 		auto ret = ptr->insert(pair);
 		if (ret) ++m_num_pairs;
 		return ret;
@@ -71,3 +78,5 @@ private:
 	hash_t m_hash;                  // hash function
 	size_t m_num_pairs;				// how many pairs are currently stored
 };
+
+#endif

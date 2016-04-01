@@ -1,30 +1,30 @@
-#pragma once
-#ifndef TEST_FAST_MAP_H
-#define TEST_FAST_MAP_H
+#ifndef TEST_FAST_LOOKUP_MAP_H
+#define TEST_FAST_LOOKUP_MAP_H
 
 #include <vector>
-#include "fast_map.h"
-#include "gtest_include.h"
 
-class AFastMap : public ::testing::Test
+#include "gtest_include.h"
+#include "fast_lookup_map.h"
+
+class AFastLookupMap : public ::testing::Test
 {
 public:
-	FastMap<int, int> m_map;
+	FastLookupMap<int, int> m_map;
 };
 
-TEST_F(AFastMap, IsEmptyWhenCreated)
+TEST_F(AFastLookupMap, IsEmptyWhenCreated)
 {
 	EXPECT_EQ(0u, m_map.size());
 }
 
-TEST_F(AFastMap, CannotAccessMissingPair)
+TEST_F(AFastLookupMap, CannotAccessMissingPair)
 {
 	int k{ 5 };
 	EXPECT_EQ(0u, m_map.count(k));
 	EXPECT_THROW(m_map.at(k), std::out_of_range);
 }
 
-TEST_F(AFastMap, CanInsertPair)
+TEST_F(AFastLookupMap, CanInsertPair)
 {
 	int k{ 5 };
 	int v{ 6 };
@@ -34,7 +34,7 @@ TEST_F(AFastMap, CanInsertPair)
 	EXPECT_EQ(v, m_map.at(k));
 }
 
-TEST_F(AFastMap, CanErasePair)
+TEST_F(AFastLookupMap, CanErasePair)
 {
 	int k{ 5 };
 	ASSERT_EQ(0u, m_map.erase(k));
@@ -46,11 +46,11 @@ TEST_F(AFastMap, CanErasePair)
 	EXPECT_EQ(0u, m_map.size());
 }
 
-TEST_F(AFastMap, CanInsertManyPairs)
+TEST_F(AFastLookupMap, CanInsertManyPairs)
 {
 	size_t count = 1000;
 
-	std::vector<std::pair<int,int>> pairs;
+	std::vector<std::pair<int, int>> pairs;
 	for (size_t i = 0; i < count; ++i)
 		pairs.push_back(std::make_pair(int(i), -int(i)));
 

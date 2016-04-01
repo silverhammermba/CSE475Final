@@ -1,7 +1,7 @@
 
 #include "gtest_include.h"
 #include "test_fast_map.h"
-#include "test_perfect_table.h"
+#include "test_fast_lookup_map.h"
 
 int main(int argc, char **argv)
 {
