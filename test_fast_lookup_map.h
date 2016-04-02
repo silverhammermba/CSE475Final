@@ -1,6 +1,8 @@
 #ifndef TEST_FAST_LOOKUP_MAP_H
 #define TEST_FAST_LOOKUP_MAP_H
 
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "gtest_include.h"
