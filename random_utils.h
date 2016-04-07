@@ -4,18 +4,18 @@
 #include <random>
 
 // return a random size_t >= min and <= max if provided
-inline size_t random_uint(size_t min, size_t max = std::numeric_limits<size_t>::max())
+inline unsigned int random_uint(unsigned int min, unsigned int max = std::numeric_limits<unsigned int>::max())
 {
 	// TODO thread-safe?
 	static std::random_device random_device;
 	static std::mt19937 generator(random_device());
 
-	std::uniform_int_distribution<size_t> dist(min, max);
+	std::uniform_int_distribution<unsigned int> dist(min, max);
 	return dist(generator);
 }
 
 // test if p is prime
-inline bool is_prime(size_t p)
+inline bool is_prime(unsigned int p)
 {
 	if (p < 2) return false;
 	if (p == 2) return true;
@@ -30,11 +30,11 @@ inline bool is_prime(size_t p)
 }
 
 // return a random prime >= min
-inline size_t random_prime_at_least(size_t min)
+inline unsigned int random_prime_at_least(unsigned int min)
 {
 	while (true)
 	{
-		size_t p = random_uint(min);
+		unsigned int p = random_uint(min);
 		if (!is_prime(p)) continue;
 		return p;
 	}
@@ -44,9 +44,9 @@ inline size_t random_prime_at_least(size_t min)
 template <class K>
 std::function<size_t(K)> random_hash(size_t range)
 {
-	size_t p = random_prime_at_least(range);
-	size_t a = random_uint(1, p - 1);
-	size_t b = random_uint(0, p - 1);
+	unsigned int p = random_prime_at_least(range);
+	unsigned int a = random_uint(1, p - 1);
+	unsigned int b = random_uint(0, p - 1);
 
 	return [range, p, a, b](K key) { return ((a * key + b) % p) % range; };
 }
