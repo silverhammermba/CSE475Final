@@ -88,11 +88,12 @@ public:
 
 	void full_rehash(table_t& table, size_t num_elements, size_t c)
 	{
-		full_rehash(table, num_elements, c, element_t());
+		element_t e;
+		full_rehash(table, num_elements, c, e);
 	}
 	hash_t full_rehash(table_t& table, size_t num_elements, size_t c, const pair_t& new_pair)
 	{
-		full_rehash(table, num_elements, c, std::make_unique<pair_t>(new_pair));
+		return full_rehash(table, num_elements, c, std::make_unique<pair_t>(new_pair));
 	}
 	hash_t full_rehash(table_t& table, size_t num_elements, size_t c, element_t& new_element)
 	{
@@ -127,6 +128,7 @@ public:
 	}
 	void move_table_to_list(table_t& table, element_list_t& element_list, size_t num_elements = 0)
 	{
+		throw std::runtime_error("FastMap::move_table_to_list not implemented yet");
 		if (element_list.size() != 0) element_list.reserve(num_elements);
 
 		for (;;) // iterate over fast_map buckets
