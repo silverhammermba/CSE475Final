@@ -2,6 +2,7 @@
 #define RANDOM_UTILS_H
 
 #include <random>
+#include <stdexcept>
 
 // return a random size_t >= min and <= max if provided
 inline unsigned int random_uint(unsigned int min, unsigned int max = std::numeric_limits<unsigned int>::max())
@@ -44,7 +45,9 @@ inline unsigned int random_prime_at_least(unsigned int min)
 template <class K>
 std::function<size_t(K)> random_hash(size_t range)
 {
-	unsigned int p = random_prime_at_least(range);
+	if (range > std::numeric_limits<unsigned int>::max()) throw std::out_of_range("random_hash requested range is too large");
+
+	unsigned int p = random_prime_at_least((unsigned int)range);
 	unsigned int a = random_uint(1, p - 1);
 	unsigned int b = random_uint(0, p - 1);
 
