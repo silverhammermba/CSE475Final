@@ -1,6 +1,6 @@
 #pragma once
-#ifndef PERFECT_TABLE_H
-#define PERFECT_TABLE_H
+#ifndef FAST_LOOKUP_MAP_H
+#define FAST_LOOKUP_MAP_H
 
 #include <algorithm>
 #include <functional>
@@ -11,7 +11,7 @@
 #include "random_utils.h"
 
 template<class K, class V>
-class PerfectTable
+class FastLookupMap
 {
 	typedef std::function<size_t(K)> hash_t;
 	typedef std::pair<K, V> pair_t;
@@ -90,7 +90,7 @@ class PerfectTable
 	}
 
 public:
-	PerfectTable(size_t min_capacity = 2)
+	FastLookupMap(size_t min_capacity = 2)
 		: m_num_pairs{ 0 }
 	{
 		m_capacity = std::max(size_t(2), min_capacity);
@@ -141,7 +141,7 @@ public:
 	// return the value matching key
 	const V& at(const K& key) const
 	{
-		if (!count(key)) throw std::out_of_range("PerfectTable::at");
+		if (!count(key)) throw std::out_of_range("FastLookupMap::at");
 		return ptr_at(key)->second;
 	}
 

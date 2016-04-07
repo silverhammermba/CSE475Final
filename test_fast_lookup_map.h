@@ -1,30 +1,30 @@
 #pragma once
-#ifndef TEST_PERFECT_TABLE_H
-#define TEST_PERFECT_TABLE_H
+#ifndef TEST_FAST_LOOKUP_MAP_H
+#define TEST_FAST_LOOKUP_MAP_H
 
 #include <vector>
+#include "fast_lookup_map.h"
 #include "gtest_include.h"
-#include "perfect_table.h"
 
-class APerfectTable : public ::testing::Test
+class AFastLookupMap : public ::testing::Test
 {
 public:
-	PerfectTable<int, int> m_table;
+	FastLookupMap<int, int> m_table;
 };
 
-TEST_F(APerfectTable, IsEmptyWhenCreated)
+TEST_F(AFastLookupMap, IsEmptyWhenCreated)
 {
 	EXPECT_EQ(0u, m_table.size());
 }
 
-TEST_F(APerfectTable, CannotAccessMissingPair)
+TEST_F(AFastLookupMap, CannotAccessMissingPair)
 {
 	int k{ 5 };
 	EXPECT_EQ(0u, m_table.count(k));
 	EXPECT_THROW(m_table.at(k), std::out_of_range);
 }
 
-TEST_F(APerfectTable, CanInsertPair)
+TEST_F(AFastLookupMap, CanInsertPair)
 {
 	int k{ 5 };
 	int v{ 6 };
@@ -34,7 +34,7 @@ TEST_F(APerfectTable, CanInsertPair)
 	EXPECT_EQ(v, m_table.at(k));
 }
 
-TEST_F(APerfectTable, CanErasePair)
+TEST_F(AFastLookupMap, CanErasePair)
 {
 	int k{ 5 };
 	ASSERT_EQ(0u, m_table.erase(k));
@@ -46,7 +46,7 @@ TEST_F(APerfectTable, CanErasePair)
 	EXPECT_EQ(0u, m_table.size());
 }
 
-TEST_F(APerfectTable, CanInsertManyPairs)
+TEST_F(AFastLookupMap, CanInsertManyPairs)
 {
 	size_t count = 1000;
 
