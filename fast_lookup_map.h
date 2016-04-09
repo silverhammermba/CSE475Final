@@ -92,16 +92,20 @@ class FastLookupMap
 		rehash_table(new_table_size);
 	}
 
-	template <class Type, class UnqualifiedType = std::remove_cv_t<Type>>
+	template <class T>
 	class ForwardIterator
-		: public std::iterator<std::forward_iterator_tag, UnqualifiedType, std::ptrdiff_t, Type*, Type&>
+		: public std::iterator<std::forward_iterator_tag, pair_t>
 	{
-		friend FastLookupMap; // needs to call explicit constructor
+		// needs to call explicit constructor
+		friend FastLookupMap;
 
-		typename table_t::iterator it, end;
+		// the const here only protects the unique_ptrs, so it works even for the non-const iterator
+		typedef typename table_t::const_iterator itr_t;
+
+		itr_t it, end;
 
 		// construct from hash table iterator
-		explicit ForwardIterator(const typename table_t::iterator& _it, const typename table_t::iterator& _end)
+		explicit ForwardIterator(const itr_t& _it, const itr_t& _end)
 			: it {_it}, end {_end}
 		{
 			while (it != end && !*it) ++it;
@@ -168,12 +172,12 @@ class FastLookupMap
 			return it != other.it || end != other.end;
 		}
 
-		Type& operator*() const
+		T& operator*() const
 		{
 			return **it;
 		}
 
-		Type* operator->() const
+		T* operator->() const
 		{
 			return &(**it);
 		}
@@ -260,12 +264,12 @@ public:
 		return iterator(m_table.end(), m_table.end());
 	}
 
-	iterator cbegin() const
+	const_iterator cbegin() const
 	{
 		return const_iterator(m_table.cbegin(), m_table.cend());
 	}
 
-	iterator cend() const
+	const_iterator cend() const
 	{
 		return const_iterator(m_table.cend(), m_table.cend());
 	}

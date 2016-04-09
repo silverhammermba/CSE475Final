@@ -66,6 +66,19 @@ TEST_F(AFastLookupMap, IsIterable)
 	ASSERT_EQ(++it, m_map.end());
 }
 
+TEST_F(AFastLookupMap, IsConstIterable)
+{
+	m_map.insert(m_pair);
+
+	// first value should be what we just inserted
+	auto it = m_map.cbegin();
+	ASSERT_EQ(it->first, m_pair.first);
+	ASSERT_EQ(it->second, m_pair.second);
+
+	// next value should be the end
+	ASSERT_EQ(++it, m_map.cend());
+}
+
 TEST_F(AFastLookupMap, CanUseRangeBasedFor)
 {
 	m_map.insert(m_pair);
@@ -79,6 +92,12 @@ TEST_F(AFastLookupMap, CanUseRangeBasedFor)
 	}
 
 	ASSERT_EQ(m_pair.second + 1, m_map.at(m_pair.first));
+
+	for (const auto& p : m_map)
+	{
+		ASSERT_EQ(p.first, m_pair.first);
+		ASSERT_EQ(p.second, m_pair.second + 1);
+	}
 }
 
 TEST_F(AFastLookupMap, CanInsertManyPairs)
