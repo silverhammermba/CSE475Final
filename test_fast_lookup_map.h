@@ -55,12 +55,11 @@ TEST_F(AFastLookupMap, IsIterable)
 
 	// first value should be what we just inserted
 	auto it = m_map.begin();
-	ASSERT_EQ((*it).first, m_pair.first);
-	ASSERT_EQ((*it).second, m_pair.second);
+	ASSERT_EQ(it->first, m_pair.first);
+	ASSERT_EQ(it->second, m_pair.second);
 
 	// we should be able to change it
-	// TODO need to get -> working
-	++(*it).second;
+	++(it->second);
 	ASSERT_EQ(m_pair.second + 1, m_map.at(m_pair.first));
 
 	// next value should be the end

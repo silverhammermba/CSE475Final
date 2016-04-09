@@ -1,4 +1,3 @@
-
 #include "gtest_include.h"
 #include "test_fast_lookup_map.h"
 #include "test_fast_map.h"

@@ -172,6 +172,11 @@ class FastLookupMap
 		{
 			return **it;
 		}
+
+		Type* operator->() const
+		{
+			return &(**it);
+		}
 	};
 public:
 
