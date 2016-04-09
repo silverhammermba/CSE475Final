@@ -11,21 +11,137 @@
 
 // Starting number of buckets (s(M)?)
 // s(M) -   "The number of sets into which the top level hash function is to partion the elements of S" (pg4)
-//			"The parameter s(M) will be chosen to be Odash(n) so that the right hand side of this equation is O(n)" (pg5)
+//          "The parameter s(M) will be chosen to be Odash(n) so that the right hand side of this equation is O(n)" (pg5)
 // Starting c value
 
 template <class K, class V>
 class FastMap
 {
 	typedef std::function<size_t(K)> hash_t;
-	typedef std::pair<K, V> pair_t;
+	typedef std::pair<const K, V> pair_t;
 	typedef std::unique_ptr<FastLookupMap<K, V>> ptr_t;
 	typedef std::vector<ptr_t> table_t;
 
 	typedef std::unique_ptr<pair_t> element_t;
 	typedef std::vector<element_t> element_list_t;
 	typedef std::vector<element_list_t> hashed_element_list_t;
+
+	template <class T>
+	class ForwardIterator
+		: public std::iterator<std::forward_iterator_tag, pair_t>
+	{
+		friend FastMap; // needs to call explicit constructor
+
+		typedef typename table_t::const_iterator o_itr_t;
+		typedef typename FastLookupMap<K, V>::iterator i_itr_t;
+
+		o_itr_t outer_it, outer_end;
+		i_itr_t inner_it;
+
+		// check if outer_it/inner_it are in a valid state
+		inline bool is_valid() const
+		{
+			// either outer_it as at the end or it is pointing to a nonempty FastLookupMap and inner_it is pointing to a pair
+			// TODO somehow this doesn't actually work and allows outer_it to go past the end
+			return outer_it == outer_end || (*outer_it && inner_it != (*outer_it)->end());
+		}
+
+		// check if outer_it can be used to get a FastLookupMap
+		inline bool outer_can_deref() const
+		{
+			return outer_it != outer_end && *outer_it;
+		}
+
+		// ensure we are in a valid state (by updating outer_it/inner_it)
+		inline void make_valid()
+		{
+			while (!is_valid())
+			{
+				++outer_it; // go to the next bucket
+				if (outer_can_deref()) inner_it = (*outer_it)->begin();
+			}
+		}
+
+		// construct from hash table iterator
+		explicit ForwardIterator(const o_itr_t& _outer_it, const o_itr_t& _outer_end)
+			: outer_it {_outer_it}, outer_end {_outer_end}
+		{
+			if (outer_can_deref()) inner_it = (*outer_it)->begin();
+			make_valid();
+		}
+
+	public:
+		ForwardIterator()
+		{
+		}
+
+		ForwardIterator(const ForwardIterator& other)
+			: outer_it {other.outer_it}, outer_end {other.outer_end}, inner_it {other.inner_it}
+		{
+		}
+
+		ForwardIterator& operator=(const ForwardIterator& other)
+		{
+			outer_it = other.outer_it;
+			outer_end = other.outer_end;
+			inner_it = other.inner_it;
+			return *this;
+		}
+
+		void swap(ForwardIterator& other) noexcept
+		{
+			std::swap(outer_it, other.outer_it);
+			std::swap(outer_end, other.outer_end);
+			std::swap(inner_it, other.inner_it);
+		}
+
+		// ++it
+		const ForwardIterator& operator++()
+		{
+			++inner_it;
+			make_valid();
+
+			return *this;
+		}
+
+		// it++
+		ForwardIterator operator++(int)
+		{
+			ForwardIterator prev {outer_it, outer_end, inner_it};
+
+			++inner_it;
+			make_valid();
+
+			return prev;
+		}
+
+		template<class OtherType>
+		bool operator==(const ForwardIterator<OtherType>& other) const
+		{
+			return outer_it == other.outer_it && outer_end == other.outer_end && inner_it == other.inner_it;
+		}
+
+		template<class OtherType>
+		bool operator!=(const ForwardIterator<OtherType>& other) const
+		{
+			return outer_it != other.outer_it || outer_end != other.outer_end || inner_it != other.inner_it;
+		}
+
+		T& operator*() const
+		{
+			return *inner_it;
+		}
+
+		T* operator->() const
+		{
+			return &(*inner_it);
+		}
+	};
 public:
+
+	typedef ForwardIterator<pair_t> iterator;
+	typedef ForwardIterator<const pair_t> const_iterator;
+
 	FastMap(size_t num_buckets = 2)
 		: m_num_pairs(0),
 		m_c(1)
@@ -186,6 +302,26 @@ public:
 		{
 			hashed_element_list.at(hash(e->first)).emplace_back(std::move(e));
 		}
+	}
+
+	iterator begin()
+	{
+		return iterator(m_table.begin(), m_table.end());
+	}
+
+	iterator end()
+	{
+		return iterator(m_table.end(), m_table.end());
+	}
+
+	const_iterator cbegin() const
+	{
+		return const_iterator(m_table.cbegin(), m_table.cend());
+	}
+
+	const_iterator cend() const
+	{
+		return const_iterator(m_table.cend(), m_table.cend());
 	}
 
 	table_t m_table;                // internal hash table

@@ -10,40 +10,73 @@ class AFastMap : public ::testing::Test
 {
 public:
 	FastMap<int, int> m_map;
+	std::pair<const int, int> m_pair;
+
+	AFastMap()
+		: m_pair {5, 6}
+	{
+	}
 };
 
 TEST_F(AFastMap, IsEmptyWhenCreated)
 {
 	EXPECT_EQ(0u, m_map.size());
+	ASSERT_EQ(m_map.begin(), m_map.end());
 }
 
 TEST_F(AFastMap, CannotAccessMissingPair)
 {
-	int k{ 5 };
-	EXPECT_EQ(0u, m_map.count(k));
-	EXPECT_THROW(m_map.at(k), std::out_of_range);
+	EXPECT_EQ(0u, m_map.count(m_pair.first));
+	EXPECT_THROW(m_map.at(m_pair.first), std::out_of_range);
 }
 
 TEST_F(AFastMap, CanInsertPair)
 {
-	int k{ 5 };
-	int v{ 6 };
-	ASSERT_EQ(true, m_map.insert(std::make_pair(k, v)));
+	ASSERT_EQ(true, m_map.insert(m_pair));
 	EXPECT_EQ(1u, m_map.size());
-	EXPECT_EQ(1u, m_map.count(k));
-	EXPECT_EQ(v, m_map.at(k));
+	EXPECT_EQ(1u, m_map.count(m_pair.first));
+	EXPECT_EQ(m_pair.second, m_map.at(m_pair.first));
 }
 
 TEST_F(AFastMap, CanErasePair)
 {
-	int k{ 5 };
-	ASSERT_EQ(0u, m_map.erase(k));
+	ASSERT_EQ(0u, m_map.erase(m_pair.first));
 
-	m_map.insert(std::make_pair(k, k + 1));
+	m_map.insert(m_pair);
 
-	EXPECT_EQ(1u, m_map.erase(k));
-	EXPECT_EQ(0u, m_map.count(k));
+	EXPECT_EQ(1u, m_map.erase(m_pair.first));
+	EXPECT_EQ(0u, m_map.count(m_pair.first));
 	EXPECT_EQ(0u, m_map.size());
+}
+
+TEST_F(AFastMap, IsIterable)
+{
+	m_map.insert(m_pair);
+
+	// first value should be what we just inserted
+	auto it = m_map.begin();
+	ASSERT_EQ(*it, m_pair);
+
+	// we should be able to change it
+	++(it->second);
+	ASSERT_EQ(m_pair.second + 1, m_map.at(m_pair.first));
+
+	// next value should be the end
+	ASSERT_EQ(++it, m_map.end());
+}
+
+TEST_F(AFastMap, CanUseRangeBasedFor)
+{
+	m_map.insert(m_pair);
+
+	for (auto& p : m_map)
+	{
+		ASSERT_EQ(p, m_pair);
+
+		++p.second;
+	}
+
+	ASSERT_EQ(m_pair.second + 1, m_map.at(m_pair.first));
 }
 
 TEST_F(AFastMap, CanInsertManyPairs)
