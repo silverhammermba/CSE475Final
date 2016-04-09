@@ -1,9 +1,12 @@
 #ifndef FAST_LOOKUP_MAP_H
 #define FAST_LOOKUP_MAP_H
 
+#include <cstddef>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -13,7 +16,7 @@ template<class K, class V>
 class FastLookupMap
 {
 	typedef std::function<size_t(K)> hash_t;
-	typedef std::pair<K, V> pair_t;
+	typedef std::pair<const K, V> pair_t;
 	typedef std::unique_ptr<pair_t> ptr_t;
 	typedef std::vector<ptr_t> table_t;
 
@@ -89,7 +92,92 @@ class FastLookupMap
 		rehash_table(new_table_size);
 	}
 
+	template <class Type, class UnqualifiedType = std::remove_cv_t<Type>>
+	class ForwardIterator
+		: public std::iterator<std::forward_iterator_tag, UnqualifiedType, std::ptrdiff_t, Type*, Type&>
+	{
+		friend FastLookupMap; // needs to call explicit constructor
+
+		typename table_t::iterator it, end;
+
+		// construct from hash table iterator
+		explicit ForwardIterator(const typename table_t::iterator& _it, const typename table_t::iterator& _end)
+			: it {_it}, end {_end}
+		{
+			while (it != end && !*it) ++it;
+		}
+
+	public:
+		ForwardIterator()
+		{
+		}
+
+		ForwardIterator(const ForwardIterator& other)
+			: it {other.it}, end {other.end}
+		{
+		}
+
+		ForwardIterator& operator=(const ForwardIterator& other)
+		{
+			it = other.it;
+			end = other.end;
+			return *this;
+		}
+
+		void swap(ForwardIterator& other) noexcept
+		{
+			std::swap(it, other.it);
+			std::swap(end, other.end);
+		}
+
+		// ++it
+		const ForwardIterator& operator++()
+		{
+			do
+			{
+				++it;
+			}
+			while (it != end && !*it);
+
+			return *this;
+		}
+
+		// it++
+		ForwardIterator operator++(int)
+		{
+			ForwardIterator prev {it, end};
+
+			do
+			{
+				++it;
+			}
+			while (it != end && !*it);
+
+			return prev;
+		}
+
+		template<class OtherType>
+		bool operator==(const ForwardIterator<OtherType>& other) const
+		{
+			return it == other.it && end == other.end;
+		}
+
+		template<class OtherType>
+		bool operator!=(const ForwardIterator<OtherType>& other) const
+		{
+			return it != other.it || end != other.end;
+		}
+
+		Type& operator*() const
+		{
+			return **it;
+		}
+	};
 public:
+
+	typedef ForwardIterator<pair_t> iterator;
+	typedef ForwardIterator<const pair_t> const_iterator;
+
 	FastLookupMap(size_t min_capacity = 2)
 		: m_num_pairs{ 0 }
 	{
@@ -117,7 +205,7 @@ public:
 		// if we're over capacity or there is a collision
 		if (m_num_pairs > m_capacity || ptr)
 		{
-			// force the new pair into the table and then rebuild it
+			// force the new pair into the table and then rebuild
 			m_table.emplace_back(new pair_t(pair));
 			rebuild_table();
 			return true;
@@ -155,6 +243,26 @@ public:
 	hash_t hash_function() const
 	{
 		return m_hash;
+	}
+
+	iterator begin()
+	{
+		return iterator(m_table.begin(), m_table.end());
+	}
+
+	iterator end()
+	{
+		return iterator(m_table.end(), m_table.end());
+	}
+
+	iterator cbegin() const
+	{
+		return const_iterator(m_table.cbegin(), m_table.cend());
+	}
+
+	iterator cend() const
+	{
+		return const_iterator(m_table.cend(), m_table.cend());
 	}
 };
 
