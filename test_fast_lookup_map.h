@@ -10,7 +10,7 @@ class AFastLookupMap : public ::testing::Test
 {
 public:
 	FastLookupMap<int, int> m_map;
-	std::pair<int, int> m_pair;
+	std::pair<const int, int> m_pair;
 
 	AFastLookupMap()
 		: m_pair {5, 6}
@@ -22,6 +22,7 @@ TEST_F(AFastLookupMap, IsEmptyWhenCreated)
 {
 	EXPECT_EQ(0u, m_map.size());
 	ASSERT_EQ(m_map.begin(), m_map.end());
+	ASSERT_EQ(m_map.cbegin(), m_map.cend());
 }
 
 TEST_F(AFastLookupMap, CannotAccessMissingPair)
@@ -55,8 +56,7 @@ TEST_F(AFastLookupMap, IsIterable)
 
 	// first value should be what we just inserted
 	auto it = m_map.begin();
-	ASSERT_EQ(it->first, m_pair.first);
-	ASSERT_EQ(it->second, m_pair.second);
+	ASSERT_EQ(*it, m_pair);
 
 	// we should be able to change it
 	++(it->second);
@@ -72,8 +72,7 @@ TEST_F(AFastLookupMap, IsConstIterable)
 
 	// first value should be what we just inserted
 	auto it = m_map.cbegin();
-	ASSERT_EQ(it->first, m_pair.first);
-	ASSERT_EQ(it->second, m_pair.second);
+	ASSERT_EQ(*it, m_pair);
 
 	// next value should be the end
 	ASSERT_EQ(++it, m_map.cend());
@@ -85,8 +84,7 @@ TEST_F(AFastLookupMap, CanUseRangeBasedFor)
 
 	for (auto& p : m_map)
 	{
-		ASSERT_EQ(p.first, m_pair.first);
-		ASSERT_EQ(p.second, m_pair.second);
+		ASSERT_EQ(p, m_pair);
 
 		++p.second;
 	}

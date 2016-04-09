@@ -273,6 +273,16 @@ public:
 	{
 		return const_iterator(m_table.cend(), m_table.cend());
 	}
+
+	const_iterator begin() const
+	{
+		return cbegin();
+	}
+
+	const_iterator end() const
+	{
+		return cend();
+	}
 };
 
 #endif
