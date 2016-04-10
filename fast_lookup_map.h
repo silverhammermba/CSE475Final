@@ -256,12 +256,12 @@ public:
 
 	iterator begin()
 	{
-		return iterator(m_table.begin(), m_table.end());
+		return iterator(m_table.cbegin(), m_table.cend());
 	}
 
 	iterator end()
 	{
-		return iterator(m_table.end(), m_table.end());
+		return iterator(m_table.cend(), m_table.cend());
 	}
 
 	const_iterator cbegin() const

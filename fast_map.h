@@ -304,12 +304,12 @@ public:
 
 	iterator begin()
 	{
-		return iterator(m_table.begin(), m_table.end());
+		return iterator(m_table.cbegin(), m_table.cend());
 	}
 
 	iterator end()
 	{
-		return iterator(m_table.end(), m_table.end());
+		return iterator(m_table.cend(), m_table.cend());
 	}
 
 	const_iterator cbegin() const
@@ -320,6 +320,16 @@ public:
 	const_iterator cend() const
 	{
 		return const_iterator(m_table.cend(), m_table.cend());
+	}
+
+	const_iterator begin() const
+	{
+		return cbegin();
+	}
+
+	const_iterator end() const
+	{
+		return cend();
 	}
 
 	table_t m_table;                // internal hash table
