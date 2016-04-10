@@ -42,7 +42,6 @@ class FastMap
 		inline bool is_valid() const
 		{
 			// either outer_it as at the end or it is pointing to a nonempty FastLookupMap and inner_it is pointing to a pair
-			// TODO somehow this doesn't actually work and allows outer_it to go past the end
 			return outer_it == outer_end || (*outer_it && inner_it != (*outer_it)->end());
 		}
 
@@ -118,13 +117,13 @@ class FastMap
 		template<class OtherType>
 		bool operator==(const ForwardIterator<OtherType>& other) const
 		{
-			return outer_it == other.outer_it && outer_end == other.outer_end && inner_it == other.inner_it;
+			return outer_it == other.outer_it && outer_end == other.outer_end && (outer_it == outer_end || inner_it == other.inner_it);
 		}
 
 		template<class OtherType>
 		bool operator!=(const ForwardIterator<OtherType>& other) const
 		{
-			return outer_it != other.outer_it || outer_end != other.outer_end || inner_it != other.inner_it;
+			return outer_it != other.outer_it || outer_end != other.outer_end || (outer_it != outer_end && inner_it != other.inner_it);
 		}
 
 		T& operator*() const
@@ -189,7 +188,6 @@ public:
 		auto& ptr = ptr_at(key);
 		return !ptr ? 0 : ptr->count(key);
 	}
-
 
 	// convenience functions for getting the unique_ptr for a key
 	ptr_t& ptr_at(const K& key)
