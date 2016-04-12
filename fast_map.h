@@ -17,6 +17,7 @@
 template <class K, class V>
 class FastMap
 {
+public:
 	typedef std::function<size_t(K)> hash_t;
 	typedef std::pair<const K, V> pair_t;
 	typedef std::unique_ptr<FastLookupMap<K, V>> ptr_t;
@@ -63,7 +64,7 @@ class FastMap
 
 		// construct from hash table iterator
 		explicit ForwardIterator(const o_itr_t& _outer_it, const o_itr_t& _outer_end)
-			: outer_it {_outer_it}, outer_end {_outer_end}
+			: outer_it{ _outer_it }, outer_end{ _outer_end }
 		{
 			if (outer_can_deref()) inner_it = (*outer_it)->begin();
 			make_valid();
@@ -75,7 +76,7 @@ class FastMap
 		}
 
 		ForwardIterator(const ForwardIterator& other)
-			: outer_it {other.outer_it}, outer_end {other.outer_end}, inner_it {other.inner_it}
+			: outer_it{ other.outer_it }, outer_end{ other.outer_end }, inner_it{ other.inner_it }
 		{
 		}
 
@@ -87,7 +88,7 @@ class FastMap
 			return *this;
 		}
 
-		void swap(ForwardIterator& other) noexcept
+		void swap(ForwardIterator& other) NOEXCEPT
 		{
 			std::swap(outer_it, other.outer_it);
 			std::swap(outer_end, other.outer_end);
@@ -106,7 +107,7 @@ class FastMap
 		// it++
 		ForwardIterator operator++(int)
 		{
-			ForwardIterator prev {outer_it, outer_end, inner_it};
+			ForwardIterator prev{ outer_it, outer_end, inner_it };
 
 			++inner_it;
 			make_valid();
@@ -136,7 +137,7 @@ class FastMap
 			return &(*inner_it);
 		}
 	};
-public:
+//public:
 
 	typedef ForwardIterator<pair_t> iterator;
 	typedef ForwardIterator<const pair_t> const_iterator;
@@ -200,10 +201,10 @@ public:
 		return m_table.at(m_hash(key));
 	}
 
-	void full_rehash(table_t& table, size_t num_elements, size_t c)
+	hash_t full_rehash(table_t& table, size_t num_elements, size_t c)
 	{
-		element_t e;
-		full_rehash(table, num_elements, c, e);
+		element_t e;	// uninitialized u_ptr
+		return full_rehash(table, num_elements, c, e);
 	}
 	hash_t full_rehash(table_t& table, size_t num_elements, size_t c, const pair_t& new_pair)
 	{
@@ -242,14 +243,23 @@ public:
 	}
 	void move_table_to_list(table_t& table, element_list_t& element_list, size_t num_elements = 0)
 	{
-		throw std::runtime_error("FastMap::move_table_to_list not implemented yet");
+		// Can't use iterators, as they dereference unique_ptr and we want to deep copy them
+
 		if (element_list.size() != 0) element_list.reserve(num_elements);
 
-		for (;;) // iterate over fast_map buckets
+		for (auto& bucket1 : table) // iterate over fast_map buckets
 		{
-			for (;;) // iterate over perfect_table buckets
+			if (bucket1 != nullptr)
 			{
-				//list.emplace_back(std::move(m_table));
+				auto& slt = *bucket1.get();
+				for (auto& bucket2 : slt.m_table) // iterate over perfect_table buckets
+				{
+					if (bucket2 != nullptr)
+					{
+						auto& pair = *bucket2.get();
+						element_list.emplace_back(std::move(bucket2));
+					}
+				}
 			}
 		}
 	}

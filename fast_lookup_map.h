@@ -15,6 +15,7 @@
 template<class K, class V>
 class FastLookupMap
 {
+public:
 	typedef std::function<size_t(K)> hash_t;
 	typedef std::pair<const K, V> pair_t;
 	typedef std::unique_ptr<pair_t> ptr_t;
@@ -86,8 +87,7 @@ class FastLookupMap
 		do
 		{
 			m_hash = random_hash<K>(new_table_size);
-		}
-		while (!is_hash_perfect(new_table_size));
+		} while (!is_hash_perfect(new_table_size));
 
 		rehash_table(new_table_size);
 	}
@@ -106,7 +106,7 @@ class FastLookupMap
 
 		// construct from hash table iterator
 		explicit ForwardIterator(const itr_t& _it, const itr_t& _end)
-			: it {_it}, end {_end}
+			: it{ _it }, end{ _end }
 		{
 			while (it != end && !*it) ++it;
 		}
@@ -117,7 +117,7 @@ class FastLookupMap
 		}
 
 		ForwardIterator(const ForwardIterator& other)
-			: it {other.it}, end {other.end}
+			: it{ other.it }, end{ other.end }
 		{
 		}
 
@@ -128,7 +128,7 @@ class FastLookupMap
 			return *this;
 		}
 
-		void swap(ForwardIterator& other) noexcept
+		void swap(ForwardIterator& other) NOEXCEPT
 		{
 			std::swap(it, other.it);
 			std::swap(end, other.end);
@@ -140,8 +140,7 @@ class FastLookupMap
 			do
 			{
 				++it;
-			}
-			while (it != end && !*it);
+			} while (it != end && !*it);
 
 			return *this;
 		}
@@ -149,13 +148,12 @@ class FastLookupMap
 		// it++
 		ForwardIterator operator++(int)
 		{
-			ForwardIterator prev {it, end};
+			ForwardIterator prev{ it, end };
 
 			do
 			{
 				++it;
-			}
-			while (it != end && !*it);
+			} while (it != end && !*it);
 
 			return prev;
 		}
@@ -182,7 +180,8 @@ class FastLookupMap
 			return &(**it);
 		}
 	};
-public:
+
+//public:
 
 	typedef ForwardIterator<pair_t> iterator;
 	typedef ForwardIterator<const pair_t> const_iterator;

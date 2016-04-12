@@ -4,6 +4,12 @@
 #include <random>
 #include <stdexcept>
 
+#ifndef _MSC_VER
+#define NOEXCEPT noexcept
+#else
+#define NOEXCEPT
+#endif
+
 // return a random size_t >= min and <= max if provided
 inline unsigned int random_uint(unsigned int min, unsigned int max = std::numeric_limits<unsigned int>::max())
 {
