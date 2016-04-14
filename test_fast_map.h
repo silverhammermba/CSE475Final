@@ -118,4 +118,25 @@ TEST_F(AFastMap, CanInsertManyPairs)
 	}
 }
 
+TEST_F(AFastMap, CanBeRebuiltFully)
+{
+	int count = 1000;
+
+	std::vector<std::pair<int, int>> pairs;
+	for (int i = 0; i < count; ++i)
+		pairs.push_back(std::make_pair(i, -i));
+
+	for (const auto& pair : pairs) m_map.insert(pair);
+
+	m_map.full_rebuild();
+
+	EXPECT_EQ(count, m_map.size());
+	
+	for (const auto& pair : pairs)
+	{
+		EXPECT_EQ(1u, m_map.count(pair.first));
+		EXPECT_EQ(pair.second, m_map.at(pair.first));
+	}
+}
+
 #endif

@@ -20,6 +20,7 @@ public:
 	typedef std::pair<const K, V> pair_t;
 	typedef std::unique_ptr<pair_t> ptr_t;
 	typedef std::vector<ptr_t> table_t;
+	template <typename Iter> using IterValueType = typename std::iterator_traits<Iter>::value_type;
 
 	table_t m_table;    // internal hash table
 	hash_t m_hash;      // hash function
@@ -29,12 +30,12 @@ public:
 	// convenience functions for getting the unique_ptr for a key
 	inline ptr_t& ptr_at(const K& key)
 	{
-		return m_table.at(m_hash(key));
+		return m_table.at(hash_key(m_hash, key));
 	}
 
 	inline const ptr_t& ptr_at(const K& key) const
 	{
-		return m_table.at(m_hash(key));
+		return m_table.at(hash_key(m_hash, key));
 	}
 
 	// calculate the necessary table size for the current capacity
@@ -43,22 +44,55 @@ public:
 		return 2 * m_capacity * (m_capacity - 1);
 	}
 
+	size_t hash_key(hash_t hash, const K& key) const
+	{
+		return hash(key);
+	}
+	size_t hash_key(hash_t hash, const pair_t& pair) const
+	{
+		return hash_key(hash, pair.first);
+	}
+	size_t hash_key(hash_t hash, const ptr_t& pair) const
+	{
+		return hash_key(hash, pair->first);
+	}
+
 	// check if the current hash function has no collisions
 	bool is_hash_perfect(size_t new_table_size) const
 	{
-		std::vector<bool> collision_map(new_table_size, false);
+		return is_hash_perfect(this->begin(), this->end(), new_table_size, m_hash);
+	}
 
-		for (const auto& entry_ptr : m_table)
+	// check if the current hash function has no collisions
+	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
+	template<class _Iter>
+	bool is_hash_perfect(_Iter first, _Iter last, size_t num_buckets, hash_t hash) const
+	{
+		std::vector<bool> collision_map(num_buckets, false);
+
+		for (; first != last; ++first)
 		{
-			if (!entry_ptr) continue;
-
-			auto hashed_key = m_hash(entry_ptr->first);
+			auto hashed_key = hash_key(hash, *first);
 			if (collision_map.at(hashed_key)) return false;
 
 			collision_map[hashed_key] = true;
 		}
 
 		return true;
+	}
+
+	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
+	template<class _Iter>
+	hash_t calculate_hash(_Iter first, _Iter last, size_t num_buckets)
+	{
+		hash_t hash;
+		do
+		{
+			hash = random_hash<K>(num_buckets);
+
+		} while (!is_hash_perfect(first, last, num_buckets, hash));
+
+		return hash;
 	}
 
 	// rehash each pair in the table (pointless if the hash hasn't changed)
@@ -72,7 +106,7 @@ public:
 		{
 			if (!ptr) continue;
 
-			m_table[m_hash(ptr->first)] = std::move(ptr);
+			m_table.at(hash_key(m_hash, ptr)) = std::move(ptr);
 		}
 	}
 
@@ -196,6 +230,22 @@ public:
 		m_hash = random_hash<K>(new_table_size);
 	}
 
+	// Static build of table
+	// It is up to the CREATOR of this object to satisfy balancing of sj <= dph_thresh
+	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
+	template <class Iter>
+	FastLookupMap(Iter first, Iter last)
+	{
+		auto num_values = std::distance(first, last);			// bj O(n)
+		m_capacity = 2 * std::max<size_t>(1, num_values);		// mj
+		auto table_size = 2 * m_capacity * (m_capacity - 1);	// sj
+
+		m_table.resize(table_size);
+
+		m_hash = calculate_hash(first, last, table_size);
+		insert(first, last);
+	}
+
 	size_t size() const
 	{
 		return m_num_pairs;
@@ -204,25 +254,43 @@ public:
 	// try to insert pair into the hash table, rebuilding if necessary
 	bool insert(const pair_t& pair)
 	{
+		auto u_pair = std::make_unique<pair_t>(pair);
+
+		return insert(std::move(u_pair));
+	}
+
+	// try to insert pair into the hash table, rebuilding if necessary
+	bool insert(ptr_t pair)
+	{
 		// key already exists, do nothing
-		if (count(pair.first)) return false;
+		if (count(pair->first)) return false;
 
 		++m_num_pairs;
-		ptr_t& ptr = ptr_at(pair.first);
+		ptr_t& ptr = ptr_at(pair->first);
 
 		// if we're over capacity or there is a collision
 		if (m_num_pairs > m_capacity || ptr)
 		{
 			// force the new pair into the table and then rebuild
-			m_table.emplace_back(new pair_t(pair));
+			m_table.emplace_back(std::move(pair));
 			rebuild_table();
 			return true;
 		}
 
 		// no collision, under capacity. simple insert
-		ptr = std::make_unique<pair_t>(pair);
+		ptr = std::move(pair);
 
 		return true;
+	}
+
+	// try to insert pairs into the hash table, rebuilding if necessary
+	template<class Iter>
+	void insert(Iter first, Iter last)
+	{
+		for (; first != last; ++first)
+		{
+			insert(std::move(*first));
+		}
 	}
 
 	// remove pair matching key from the table
