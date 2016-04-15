@@ -20,8 +20,8 @@ class FastMap
 public:
 	typedef std::function<size_t(K)> hash_t;
 	typedef std::pair<const K, V> pair_t;
-	typedef std::unique_ptr<FastLookupMap<K, V>> ptr_t;
-	typedef std::vector<ptr_t> table_t;
+	typedef std::unique_ptr<FastLookupMap<K, V>> subtable_t;
+	typedef std::vector<subtable_t> table_t;
 
 	typedef std::unique_ptr<pair_t> element_t;
 	typedef std::vector<element_t> element_list_t;
@@ -144,7 +144,9 @@ public:
 
 	FastMap(size_t num_buckets = 2)
 		: m_num_pairs(0),
-		m_c(1)
+		m_num_operations(0),
+		m_c(1),
+		m_M((1 + m_c) * std::max<size_t>(m_num_pairs, 4))
 	{
 		if (num_buckets == 0) throw std::out_of_range("FastMap num_buckets must not be zero");
 		m_table.resize(num_buckets);
@@ -159,16 +161,63 @@ public:
 	// try to insert pair into the hash table
 	bool insert(const pair_t& pair)
 	{
-		auto& ptr = ptr_at(pair.first);
-		if (!ptr) ptr_at(pair.first) = std::make_unique<FastLookupMap<K, V>>();
-		auto ret = ptr->insert(pair);
-		if (ret) ++m_num_pairs;
-		return ret;
+		++m_num_operations;
+		if (m_num_operations > m_M)
+		{
+			full_rebuild(pair);
+		}
+		else
+		{
+			auto& subtable = ptr_at(pair.first);										// Hash key to get bucket
+			if (subtable == nullptr) subtable = std::make_unique<FastLookupMap<K, V>>();// If bucket is empty, initialize
+			if (subtable->count(pair.first)) return false;								// Return if key exists
+
+			if (subtable->size() + 1 <= subtable->capacity())
+			{
+				subtable->insert(pair);													// Subtable will rehash if there's a collision
+			}
+			else
+			{
+				auto current_bucket = m_hash(pair.first);
+
+				auto capacity = subtable->capacity();
+				auto new_capacity = 2 * std::max<size_t>(1, capacity);			// mj
+				auto new_table_size = 2 * new_capacity * (new_capacity - 1);	// sj
+
+				// Calculate new accumulated subtable allocation
+				size_t sj_sum = 0;
+				for (size_t i = 0; i < m_table.size(); ++i)
+				{
+					if (i == current_bucket)
+					{
+						sj_sum += new_table_size;
+					}
+					else if (m_table[i] != nullptr)
+					{
+						sj_sum += m_table[i]->allocated();
+					}	
+				}
+
+				if (sj_sum <= calculate_dph_thresh(m_table.size(), m_M))
+				{
+					subtable->rebuild_table(new_table_size, std::make_unique<pair_t>(pair));
+				}
+				else
+				{
+					full_rebuild(pair);
+				}
+			}
+
+		}
+
+		return true;
 	}
 
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
+		++m_num_operations;
+
 		auto& ptr = ptr_at(key);
 		auto ret = !ptr ? 0 : ptr->erase(key);
 		if (ret) --m_num_pairs;
@@ -191,12 +240,12 @@ public:
 	}
 
 	// convenience functions for getting the unique_ptr for a key
-	ptr_t& ptr_at(const K& key)
+	subtable_t& ptr_at(const K& key)
 	{
 		return m_table.at(m_hash(key));
 	}
 
-	const ptr_t& ptr_at(const K& key) const
+	const subtable_t& ptr_at(const K& key) const
 	{
 		return m_table.at(m_hash(key));
 	}
@@ -235,6 +284,8 @@ public:
 		{
 			m_table[i].reset(new FastLookupMap<K, V>(hashed_element_list[i].begin(), hashed_element_list[i].end()));
 		}
+
+		m_num_operations = 0;
 	}
 	void move_table_to_list(table_t& table, element_list_t& element_list, size_t num_elements = 0)
 	{
@@ -349,6 +400,7 @@ public:
 	table_t m_table;                // internal hash table
 	hash_t m_hash;                  // hash function
 	size_t m_num_pairs;             // how many pairs are currently stored
+	size_t m_num_operations;
 	size_t m_M;
 	size_t m_c;
 };

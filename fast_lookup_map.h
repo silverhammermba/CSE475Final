@@ -20,7 +20,6 @@ public:
 	typedef std::pair<const K, V> pair_t;
 	typedef std::unique_ptr<pair_t> ptr_t;
 	typedef std::vector<ptr_t> table_t;
-	template <typename Iter> using IterValueType = typename std::iterator_traits<Iter>::value_type;
 
 	table_t m_table;    // internal hash table
 	hash_t m_hash;      // hash function
@@ -124,6 +123,31 @@ public:
 		} while (!is_hash_perfect(new_table_size));
 
 		rehash_table(new_table_size);
+	}
+
+	void rebuild_table(size_t new_table_size, ptr_t new_element = ptr_t())
+	{
+		std::vector<ptr_t> element_list;
+		element_list.reserve(m_num_pairs + 1);
+		m_table.resize(new_table_size);
+
+		// Move table contents to list - cannot use iterators as they dereference unique_ptrs
+		for (auto& pair : m_table)
+		{
+			if (pair != nullptr) element_list.emplace_back(std::move(pair));
+		}
+		if (new_element != nullptr)
+		{
+			element_list.emplace_back(std::move(new_element));
+			++m_num_pairs;
+		}
+
+		m_hash = calculate_hash(element_list.begin(), element_list.end(), new_table_size);
+
+		for (auto it = element_list.begin(); it != element_list.end(); ++it)
+		{
+			m_table.at(hash_key(m_hash, *it)) = std::move(*it);
+		}
 	}
 
 	template <class T>
@@ -251,6 +275,16 @@ public:
 		return m_num_pairs;
 	}
 
+	size_t capacity() const
+	{
+		return m_capacity;
+	}
+
+	size_t allocated() const
+	{
+		return m_table.size();
+	}
+
 	// try to insert pair into the hash table, rebuilding if necessary
 	bool insert(const pair_t& pair)
 	{
@@ -284,6 +318,7 @@ public:
 	}
 
 	// try to insert pairs into the hash table, rebuilding if necessary
+	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
 	template<class Iter>
 	void insert(Iter first, Iter last)
 	{
