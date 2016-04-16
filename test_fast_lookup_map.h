@@ -183,6 +183,7 @@ TEST_F(AFastLookupMap, CanBeReadConcurrently)
 
 	std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count() << std::endl;
 }
+
 TEST_F(AFastLookupMap, CanBeReadSerially)
 {
 	int num_threads = 4;
@@ -224,7 +225,6 @@ TEST_F(AFastLookupMap, CanBeReadSerially)
 	std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count() << std::endl;
 }
 
-
 TEST_F(AFastLookupMap, CanBeReadALot)
 {
 	int num_threads = 4;
@@ -243,6 +243,113 @@ TEST_F(AFastLookupMap, CanBeReadALot)
 			check += map.at(i);
 		}
 
+	}
+	end_time = std::chrono::high_resolution_clock::now();
+
+	std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count() << std::endl;
+}
+
+TEST_F(AFastLookupMap, CanBeInsertedConcurrently)
+{
+	int num_threads = 4;
+	int count = m_pairs.size();
+	std::atomic<int> barrier{ 0 };
+	std::chrono::high_resolution_clock::time_point start_time, end_time;
+
+	FastLookupMap<int, int> map(m_pairs.begin(), m_pairs.end());
+
+	auto read = [&](int id)
+	{
+		++barrier;
+		while (barrier < num_threads);
+		if (id == 0)
+			start_time = std::chrono::high_resolution_clock::now();
+
+		int check = 0;
+		for (int i = 0; i < count; ++i)
+		{
+			if (i % num_threads == id)
+			{
+				//ASSERT_EQ(true, map.insert(pairs[j]));
+				map.insert(m_pairs[i]);
+			}
+		}
+
+		--barrier;
+		while (barrier > 0);
+		if (id == num_threads - 1)
+			end_time = std::chrono::high_resolution_clock::now();
+
+		return check;
+	};
+
+	std::vector<std::thread> threads;
+	for (int i = 0; i < num_threads; ++i)
+		threads.emplace_back(std::bind(read, i));
+	for (int i = 0; i < num_threads; ++i)
+		threads[i].join();
+
+	std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count() << std::endl;
+}
+
+TEST_F(AFastLookupMap, CanBeInsertedSerially)
+{
+	int num_threads = 4;
+	int count = m_pairs.size();
+	std::atomic<int> barrier{ 0 };
+	std::chrono::high_resolution_clock::time_point start_time, end_time;
+
+	FastLookupMap<int, int> map(m_pairs.begin(), m_pairs.end());
+
+
+	auto read = [&](int id)
+	{
+		if (id == 0)
+			start_time = std::chrono::high_resolution_clock::now();
+
+		while (barrier < id);
+
+		int check = 0;
+		for (int i = 0; i < count; ++i)
+		{
+			if (i % num_threads == id)
+			{
+				//ASSERT_EQ(true, map.insert(pairs[j]));
+				map.insert(m_pairs[i]);
+			}
+		}
+
+		++barrier;
+
+		if (id == num_threads - 1)
+			end_time = std::chrono::high_resolution_clock::now();
+
+		return check;
+	};
+
+	std::vector<std::thread> threads;
+	for (int i = 0; i < num_threads; ++i)
+	{
+		threads.emplace_back(std::bind(read, i));
+		threads[i].join();
+	}
+
+	std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count() << std::endl;
+}
+
+TEST_F(AFastLookupMap, CanBeInsertedALot)
+{
+	int num_threads = 4;
+	int count = m_pairs.size();
+	std::chrono::high_resolution_clock::time_point start_time, end_time;
+
+	FastLookupMap<int, int> map(m_pairs.begin(), m_pairs.end());
+
+	start_time = std::chrono::high_resolution_clock::now();
+	for (int j = 0; j < num_threads; ++j)
+	{
+		//ASSERT_EQ(true, map.insert(pairs[j]));
+		map.insert(m_pairs[j]);
 	}
 	end_time = std::chrono::high_resolution_clock::now();
 
