@@ -11,7 +11,7 @@
 
 // Starting number of buckets (s(M)?)
 // s(M) -   "The number of sets into which the top level hash function is to partion the elements of S" (pg4)
-//          "The parameter s(M) will be chosen to be Odash(n) so that the right hand side of this equation is O(n)" (pg5)
+//          "The parameter s(M) will be chosen to be Theta(n) so that the right hand side of this equation is O(n)" (pg5)
 // Starting c value
 
 template <class K, class V>
@@ -349,8 +349,7 @@ public:
 	table_t m_table;                // internal hash table
 	hash_t m_hash;                  // hash function
 	size_t m_num_pairs;             // how many pairs are currently stored
-	size_t m_M;
-	size_t m_c;
+	size_t m_c; // TODO figure out what this means
 };
 
 #endif

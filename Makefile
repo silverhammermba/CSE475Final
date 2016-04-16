@@ -1,6 +1,6 @@
 CXXFLAGS=-std=c++14 -Wall -Wextra -Wfatal-errors -ggdb -Igoogletest/googletest/include
 LDFLAGS=-Lgoogletest/googlemock/gtest
-LDLIBS=-lpthread -lgtest
+LDLIBS=-lpthread -lgtest -lboost_system -lboost_thread
 SRC=$(wildcard *.cpp)
 HEADERS=$(wildcard *.h)
 OBJ=$(subst .cpp,.o,$(SRC))

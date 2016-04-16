@@ -9,6 +9,8 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <boost/thread/locks.hpp>
+#include <boost/thread/shared_mutex.hpp>
 
 #include "random_utils.h"
 
@@ -22,10 +24,12 @@ public:
 	typedef std::vector<ptr_t> table_t;
 	template <typename Iter> using IterValueType = typename std::iterator_traits<Iter>::value_type;
 
+	boost::shared_mutex write_mutex;
+
 	table_t m_table;    // internal hash table
 	hash_t m_hash;      // hash function
 	size_t m_capacity;  // how many pairs can be stored without rebuilding
-	size_t m_num_pairs; // how many pairs are currently stored
+	size_t m_num_pairs {0}; // how many pairs are currently stored
 
 	// convenience functions for getting the unique_ptr for a key
 	inline ptr_t& ptr_at(const K& key)
@@ -221,7 +225,6 @@ public:
 	typedef ForwardIterator<const pair_t> const_iterator;
 
 	FastLookupMap(size_t min_capacity = 2)
-		: m_num_pairs{ 0 }
 	{
 		m_capacity = std::max(size_t(2), min_capacity);
 		auto new_table_size = calculate_table_size();
@@ -235,7 +238,6 @@ public:
 	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
 	template <class Iter>
 	FastLookupMap(Iter first, Iter last)
-		: m_num_pairs{0}
 	{
 		auto num_values = std::distance(first, last);			// bj O(n)
 		m_capacity = 2 * std::max<size_t>(1, num_values);		// mj
@@ -263,6 +265,8 @@ public:
 	// try to insert pair into the hash table, rebuilding if necessary
 	bool insert(ptr_t pair)
 	{
+		boost::unique_lock<boost::shared_mutex> lock(write_mutex);
+
 		// key already exists, do nothing
 		if (count(pair->first)) return false;
 
@@ -304,8 +308,9 @@ public:
 	}
 
 	// return the value matching key
-	const V& at(const K& key) const
+	const V& at(const K& key) 
 	{
+		boost::shared_lock<boost::shared_mutex> lock(write_mutex);
 		if (!count(key)) throw std::out_of_range("FastLookupMap::at");
 		return ptr_at(key)->second;
 	}
