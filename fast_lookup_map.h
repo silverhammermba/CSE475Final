@@ -235,6 +235,7 @@ public:
 	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
 	template <class Iter>
 	FastLookupMap(Iter first, Iter last)
+		: m_num_pairs{0}
 	{
 		auto num_values = std::distance(first, last);			// bj O(n)
 		m_capacity = 2 * std::max<size_t>(1, num_values);		// mj
