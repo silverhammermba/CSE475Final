@@ -161,18 +161,12 @@ TEST_F(AFastLookupMap, CanBeReadConcurrently)
 		if (id == 0)
 			start_time = std::chrono::high_resolution_clock::now();
 
-		int check = 0;
-		for (int i = 0; i < count; ++i)
-		{
-			check += map.at(i);
-		}
+		for (int i = 0; i < count; ++i) map.at(i);
 
 		--barrier;
 		while (barrier > 0);
 		if (id == num_threads - 1)
 			end_time = std::chrono::high_resolution_clock::now();
-
-		return check;
 	};
 
 	std::vector<std::thread> threads;
@@ -183,11 +177,13 @@ TEST_F(AFastLookupMap, CanBeReadConcurrently)
 
 	std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count() << std::endl;
 }
+
 TEST_F(AFastLookupMap, CanBeReadSerially)
 {
 	int num_threads = 4;
 	int count = m_pairs.size();
 	std::atomic<int> barrier {0};
+	std::atomic<int> serial_barrier {0};
 	std::chrono::high_resolution_clock::time_point start_time, end_time;
 
 	FastLookupMap<int, int> map(m_pairs.begin(), m_pairs.end());
@@ -195,35 +191,29 @@ TEST_F(AFastLookupMap, CanBeReadSerially)
 
 	auto read = [&](int id)
 	{
+		++barrier;
+		while (barrier < num_threads);
 		if (id == 0)
 			start_time = std::chrono::high_resolution_clock::now();
 
-		while (barrier < id);
+		while (serial_barrier < id); // wait your turn
 
-		int check = 0;
-		for (int i = 0; i < count; ++i)
-		{
-			check += map.at(i);
-		}
+		for (int i = 0; i < count; ++i) map.at(i);
 
-		++barrier;
+		++serial_barrier;
 
 		if (id == num_threads - 1)
 			end_time = std::chrono::high_resolution_clock::now();
-
-		return check;
 	};
 
 	std::vector<std::thread> threads;
 	for (int i = 0; i < num_threads; ++i)
-	{
 		threads.emplace_back(std::bind(read, i));
+	for (int i = 0; i < num_threads; ++i)
 		threads[i].join();
-	}
 
 	std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(end_time - start_time).count() << std::endl;
 }
-
 
 TEST_F(AFastLookupMap, CanBeReadALot)
 {
@@ -237,12 +227,7 @@ TEST_F(AFastLookupMap, CanBeReadALot)
 	start_time = std::chrono::high_resolution_clock::now();
 	for (int j = 0; j < num_threads; ++j)
 	{
-		int check = 0;
-		for (int i = 0; i < count; ++i)
-		{
-			check += map.at(i);
-		}
-
+		for (int i = 0; i < count; ++i) map.at(i);
 	}
 	end_time = std::chrono::high_resolution_clock::now();
 
