@@ -57,15 +57,9 @@ public:
 	}
 
 	// check if the current hash function has no collisions
-	bool is_hash_perfect(size_t new_table_size) const
-	{
-		return is_hash_perfect(this->begin(), this->end(), new_table_size, m_hash);
-	}
-
-	// check if the current hash function has no collisions
 	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
-	template<class _Iter>
-	bool is_hash_perfect(_Iter first, _Iter last, size_t num_buckets, hash_t hash) const
+	template<class Iter>
+	bool is_hash_perfect(Iter first, Iter last, size_t num_buckets, hash_t hash) const
 	{
 		std::vector<bool> collision_map(num_buckets, false);
 
@@ -81,8 +75,8 @@ public:
 	}
 
 	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
-	template<class _Iter>
-	hash_t calculate_hash(_Iter first, _Iter last, size_t num_buckets)
+	template<class Iter>
+	hash_t calculate_hash(Iter first, Iter last, size_t num_buckets)
 	{
 		hash_t hash;
 		do
@@ -95,10 +89,10 @@ public:
 	}
 
 	// rehash each pair in the table (pointless if the hash hasn't changed)
-	void rehash_table(size_t new_table_size)
+	void rehash_table(size_t new_bucket_count)
 	{
 		table_t old_table = std::move(m_table);
-		m_table.resize(new_table_size);
+		m_table.resize(new_bucket_count);
 
 		// rehash old pairs
 		for (auto& ptr : old_table)
@@ -117,21 +111,18 @@ public:
 		while (m_num_pairs > m_capacity) m_capacity *= 2;
 		auto new_table_size = calculate_table_size();
 
-		do
-		{
-			m_hash = random_hash<K>(new_table_size);
-		} while (!is_hash_perfect(new_table_size));
+		m_hash = calculate_hash(this->begin(), this->end(), new_table_size);
 
 		rehash_table(new_table_size);
 	}
 
-	void rebuild_table(size_t new_table_size, ptr_t new_element = ptr_t())
+	void rebuild_table(size_t new_bucket_count, ptr_t new_element = ptr_t())
 	{
 		std::vector<ptr_t> element_list;
-		element_list.reserve(m_num_pairs + 1);
-		m_table.resize(new_table_size);
+		element_list.reserve(m_num_pairs + 1);	// allocate extra in case new_element exists
+		m_table.resize(new_bucket_count);
 
-		// Move table contents to list - cannot use iterators as they dereference unique_ptrs
+		// Move table contents to list - cannot use FLM iterators as they dereference unique_ptrs
 		for (auto& pair : m_table)
 		{
 			if (pair != nullptr) element_list.emplace_back(std::move(pair));
@@ -142,8 +133,9 @@ public:
 			++m_num_pairs;
 		}
 
-		m_hash = calculate_hash(element_list.begin(), element_list.end(), new_table_size);
+		m_hash = calculate_hash(element_list.begin(), element_list.end(), new_bucket_count);
 
+		// Rehash all elements and place into table
 		for (auto it = element_list.begin(); it != element_list.end(); ++it)
 		{
 			m_table.at(hash_key(m_hash, *it)) = std::move(*it);
@@ -259,6 +251,7 @@ public:
 	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
 	template <class Iter>
 	FastLookupMap(Iter first, Iter last)
+		: m_num_pairs{ 0 }
 	{
 		auto num_values = std::distance(first, last);			// bj O(n)
 		m_capacity = 2 * std::max<size_t>(1, num_values);		// mj
@@ -272,17 +265,17 @@ public:
 
 	size_t size() const
 	{
-		return m_num_pairs;
+		return m_num_pairs;		// bj
 	}
 
 	size_t capacity() const
 	{
-		return m_capacity;
+		return m_capacity;		// mj
 	}
 
-	size_t allocated() const
+	size_t bucket_count() const
 	{
-		return m_table.size();
+		return m_table.size();	// sj, also number of partitions
 	}
 
 	// try to insert pair into the hash table, rebuilding if necessary
@@ -297,7 +290,11 @@ public:
 	bool insert(ptr_t pair)
 	{
 		// key already exists, do nothing
-		if (count(pair->first)) return false;
+		if (count(pair->first))
+		{
+			//throw std::exception();	// FastMap's insert logic shouldn't allow us to get here
+			return false;
+		}
 
 		++m_num_pairs;
 		ptr_t& ptr = ptr_at(pair->first);
@@ -305,6 +302,7 @@ public:
 		// if we're over capacity or there is a collision
 		if (m_num_pairs > m_capacity || ptr)
 		{
+			//throw std::exception();	// FastMap's insert logic shouldn't allow us to get here
 			// force the new pair into the table and then rebuild
 			m_table.emplace_back(std::move(pair));
 			rebuild_table();
@@ -349,6 +347,12 @@ public:
 	{
 		const ptr_t& ptr = ptr_at(key);
 		return ptr && ptr->first == key;
+	}
+
+	bool is_collision(const K& key) const
+	{
+		const ptr_t& ptr = ptr_at(key);
+		return ptr && ptr->first != key;
 	}
 
 	hash_t hash_function() const

@@ -9,11 +9,6 @@
 
 #include "fast_lookup_map.h"
 
-// Starting number of buckets (s(M)?)
-// s(M) -   "The number of sets into which the top level hash function is to partion the elements of S" (pg4)
-//          "The parameter s(M) will be chosen to be Odash(n) so that the right hand side of this equation is O(n)" (pg5)
-// Starting c value
-
 template <class K, class V>
 class FastMap
 {
@@ -142,15 +137,18 @@ public:
 	typedef ForwardIterator<pair_t> iterator;
 	typedef ForwardIterator<const pair_t> const_iterator;
 
-	FastMap(size_t num_buckets = 2)
-		: m_num_pairs(0),
-		m_num_operations(0),
-		m_c(1),
-		m_M((1 + m_c) * std::max<size_t>(m_num_pairs, 4))
+	FastMap()
+		: m_c(2),
+		m_SM_SCALING(1),
+		m_num_pairs(0),
+		m_num_operations(0)
 	{
-		if (num_buckets == 0) throw std::out_of_range("FastMap num_buckets must not be zero");
-		m_table.resize(num_buckets);
-		m_hash = random_hash<K>(num_buckets);
+		// Could call full_rebuild here instead to reuse code
+		// Performed here now, otherwise a full_rebuild would occur and do same operation after first insert
+		m_M = (1 + m_c) * std::max(this->size(), size_t(4));	// Calculate new element number threshold
+		auto num_partitions = s(m_M);							// Calculate new number of partitions/buckets in Top Level Table
+		m_table.resize(num_partitions);							// Grow table if needed to accomodate new number of partitions/buckets
+		m_hash = random_hash<K>(num_partitions);
 	}
 
 	size_t size() const
@@ -168,48 +166,68 @@ public:
 		}
 		else
 		{
-			auto& subtable = ptr_at(pair.first);										// Hash key to get bucket
-			if (subtable == nullptr) subtable = std::make_unique<FastLookupMap<K, V>>();// If bucket is empty, initialize
-			if (subtable->count(pair.first)) return false;								// Return if key exists
+			auto bucket = hash_key(m_hash, pair);
+			auto& subtable = m_table.at(bucket);										// Hash key to get bucket
+
+			// If subtable doesn't exist create it, insert the element, and return
+			if (subtable == nullptr)
+			{
+				subtable = std::make_unique<FastLookupMap<K, V>>();
+				subtable->insert(pair);
+				++m_num_pairs;
+				return true;
+			}
+
+			// If the value exists in the subtable return
+			if (subtable->count(pair.first))
+			{
+				return false;
+			}
 
 			if (subtable->size() + 1 <= subtable->capacity())
 			{
-				subtable->insert(pair);													// Subtable will rehash if there's a collision
+				if (!subtable->is_collision(pair.first))
+				{
+					subtable->insert(pair);
+				}
+				else
+				{
+					subtable->rebuild_table(subtable->bucket_count(), std::make_unique<pair_t>(pair));
+				}				
 			}
 			else
 			{
-				auto current_bucket = m_hash(pair.first);
-
-				auto capacity = subtable->capacity();
-				auto new_capacity = 2 * std::max<size_t>(1, capacity);			// mj
-				auto new_table_size = 2 * new_capacity * (new_capacity - 1);	// sj
+				auto capacity = subtable->capacity();									// mj
+				auto new_capacity = 2 * std::max<size_t>(1, capacity);					// mj
+				auto new_subtable_bucket_count = 2 * new_capacity * (new_capacity - 1);	// sj
 
 				// Calculate new accumulated subtable allocation
 				size_t sj_sum = 0;
 				for (size_t i = 0; i < m_table.size(); ++i)
 				{
-					if (i == current_bucket)
+					if (i == bucket)
 					{
-						sj_sum += new_table_size;
+						sj_sum += new_subtable_bucket_count;
 					}
 					else if (m_table[i] != nullptr)
 					{
-						sj_sum += m_table[i]->allocated();
+						sj_sum += m_table[i]->bucket_count();
 					}	
 				}
 
-				if (sj_sum <= calculate_dph_thresh(m_table.size(), m_M))
+				auto dph_thresh = calculate_dph_thresh();
+				if (sj_sum <= dph_thresh)
 				{
-					subtable->rebuild_table(new_table_size, std::make_unique<pair_t>(pair));
+					subtable->rebuild_table(new_subtable_bucket_count, std::make_unique<pair_t>(pair));
 				}
 				else
 				{
 					full_rebuild(pair);
 				}
 			}
-
 		}
 
+		++m_num_pairs;
 		return true;
 	}
 
@@ -238,7 +256,7 @@ public:
 		auto& ptr = ptr_at(key);
 		return !ptr ? 0 : ptr->count(key);
 	}
-
+	
 	// convenience functions for getting the unique_ptr for a key
 	subtable_t& ptr_at(const K& key)
 	{
@@ -250,32 +268,33 @@ public:
 		return m_table.at(m_hash(key));
 	}
 
-	void full_rebuild()
-	{
-		full_rebuild(element_t());
-	}
 	void full_rebuild(const pair_t& new_pair)
 	{
 		full_rebuild(std::make_unique<pair_t>(new_pair));
 	}
-	void full_rebuild(element_t new_element)
+	void full_rebuild(element_t new_element = element_t())
 	{
 		element_list_t element_list;
 		std::vector<size_t> hash_distribution;
 		hashed_element_list_t hashed_element_list;
 
-		move_table_to_list(m_table, element_list, m_num_pairs);
+		size_t num_elements = this->size();
+		element_list.reserve(num_elements + 1);
+
+		move_table_to_list(m_table, element_list);
 
 		// If arg new_element exists, push onto list and update count
 		if (new_element != nullptr)
 		{
 			element_list.emplace_back(std::move(new_element));
-			++m_num_pairs;
+			++num_elements;
 		}
 
-		auto M = (1 + m_c) * std::max(m_num_pairs, size_t(4));
+		m_M = (1 + m_c) * std::max(num_elements, size_t(4));	// Calculate new element number threshold
+		auto num_partitions = s(m_M);							// Calculate new number of partitions/buckets in Top Level Table
+		m_table.resize(num_partitions);							// Grow table if needed to accomodate new number of partitions/buckets
 
-		m_hash = find_balanced_hash(element_list, m_table.size(), calculate_dph_thresh(m_table.size(), M), hash_distribution);
+		m_hash = find_balanced_hash(element_list, m_table.size(), calculate_dph_thresh(), hash_distribution);
 
 		hash_element_list(element_list, hashed_element_list, m_hash, hash_distribution);
 
@@ -287,11 +306,9 @@ public:
 
 		m_num_operations = 0;
 	}
-	void move_table_to_list(table_t& table, element_list_t& element_list, size_t num_elements = 0)
+	void move_table_to_list(table_t& table, element_list_t& element_list)
 	{
-		// Can't use iterators for FastMap, as they dereference unique_ptr and we want to deep copy them
-
-		if (element_list.size() != 0) element_list.reserve(num_elements);
+		// Can't use iterators, as they dereference unique_ptr and we want to deep copy them
 
 		for (auto& bucket1 : table) // iterate over fast_map buckets
 		{
@@ -305,12 +322,6 @@ public:
 						element_list.emplace_back(std::move(u_pair));
 					}
 				}
-
-				/*auto& slt = *bucket1.get();
-				for (auto it = slt.begin(); it != slt.end(); ++it)
-				{
-					element_list.emplace_back(std::move(*it));
-				}*/
 			}
 		}
 	}
@@ -350,7 +361,7 @@ public:
 	{
 		hashed_element_list.resize(hash_distribution.size());
 
-		// Resize each hashed element list to its expected count
+		// Reserve each hashed element list to its expected count
 		for (size_t i = 0; i < hash_distribution.size(); ++i)
 		{
 			hashed_element_list[i].reserve(hash_distribution[i]);
@@ -362,36 +373,48 @@ public:
 			hashed_element_list.at(hash(e->first)).emplace_back(std::move(e));
 		}
 	}
-	double calculate_dph_thresh(size_t sM, size_t M)
+	double calculate_dph_thresh()
 	{
-		return ((32.0 * std::pow(M, 2)) / sM) + 4.0 * M;
+		return ((32.0 * std::pow(m_M, 2)) / m_table.size()) + 4.0 * m_M;
+	}
+	size_t s(size_t M) const
+	{
+		return m_SM_SCALING * M;
+	}
+
+	size_t hash_key(hash_t hash, const K& key) const
+	{
+		return hash(key);
+	}
+	size_t hash_key(hash_t hash, const pair_t& pair) const
+	{
+		return hash_key(hash, pair.first);
+	}
+	size_t hash_key(hash_t hash, const element_t& pair) const
+	{
+		return hash_key(hash, pair->first);
 	}
 
 	iterator begin()
 	{
 		return iterator(m_table.cbegin(), m_table.cend());
 	}
-
 	iterator end()
 	{
 		return iterator(m_table.cend(), m_table.cend());
 	}
-
 	const_iterator cbegin() const
 	{
 		return const_iterator(m_table.cbegin(), m_table.cend());
 	}
-
 	const_iterator cend() const
 	{
 		return const_iterator(m_table.cend(), m_table.cend());
 	}
-
 	const_iterator begin() const
 	{
 		return cbegin();
 	}
-
 	const_iterator end() const
 	{
 		return cend();
@@ -401,8 +424,11 @@ public:
 	hash_t m_hash;                  // hash function
 	size_t m_num_pairs;             // how many pairs are currently stored
 	size_t m_num_operations;
-	size_t m_M;
-	size_t m_c;
+	size_t m_M;						// Threshold for total number of elements in Table
+
+	// Constants
+	size_t m_c;						// Growth of M
+	size_t m_SM_SCALING;			// Growth of Partitions/Buckets in Top Level Table
 };
 
 #endif
