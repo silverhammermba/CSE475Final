@@ -11,6 +11,12 @@
 #include <boost/thread/shared_mutex.hpp>
 #include "fast_lookup_map.h"
 
+using boost::shared_mutex;
+using boost::unique_lock;
+using boost::shared_lock;
+using boost::upgrade_lock;
+using boost::upgrade_to_unique_lock;
+
 template <class K, class V>
 class FastMap
 {
@@ -141,7 +147,6 @@ public:
 	FastMap()
 		: m_C(2),
 		m_SM_SCALING(1),
-		m_num_pairs(0),
 		m_num_operations(0)
 	{
 		// Could call fullRehash here instead to reuse code
@@ -149,6 +154,11 @@ public:
 		m_capacity = (1 + m_C) * std::max(this->size(), size_t(4));	// Calculate new element count threshold
 		auto bucket_count = s(m_capacity);							// Calculate new number of partitions/buckets in Top Level Table
 		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
+		m_subtable_mutex.resize(bucket_count);
+		for (auto& umutex : m_subtable_mutex)
+		{
+			if (umutex == nullptr) umutex = std::make_unique<shared_mutex>();
+		}
 		m_hash = random_hash<K>(bucket_count);
 	}
 
@@ -156,7 +166,6 @@ public:
 	FastMap(Iter first, Iter last)
 		: m_C(2),
 		m_SM_SCALING(1),
-		m_num_pairs(0),
 		m_num_operations(0)
 	{
 		// Could call fullRehash here instead to reuse code
@@ -164,6 +173,11 @@ public:
 		m_capacity = (1 + m_C) * std::max(this->size(), size_t(4));	// Calculate new element count threshold
 		auto bucket_count = s(m_capacity);							// Calculate new number of partitions/buckets in Top Level Table
 		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
+		m_subtable_mutex.resize(bucket_count);
+		for (auto& umutex : m_subtable_mutex)
+		{
+			if (umutex == nullptr) umutex = std::make_unique<shared_mutex>();
+		}
 		m_hash = random_hash<K>(bucket_count);
 
 		for (; first != last; ++first)
@@ -171,19 +185,23 @@ public:
 			this->insert(std::move(*first));
 		}
 	}
-	
+
 	// try to insert pair into the hash table
 	bool insert(const pair_t& pair)
 	{
-		boost::upgrade_lock<boost::shared_mutex> lock(m_access_mutex);
+		upgrade_lock<shared_mutex> rb_lock(m_rebuild_mutex);					// unexclusive-access with write-lock
 
 		++m_num_operations;
 		if (m_num_operations > m_capacity)
 		{
-			fullRehash(lock, pair);
+			upgrade_to_unique_lock<shared_mutex> uniqueLock(rb_lock);			// exclusive-access with write-lock
+
+			fullRehash(pair);
 		}
 		else
 		{
+			unique_lock<shared_mutex> st_lock(getSubtableMutex(pair.first));	// exclusive-access with write-lock
+
 			auto bucket = hashKey(m_hash, pair);
 			auto& usubtable = getSubtable(pair.first);
 
@@ -192,7 +210,6 @@ public:
 			{
 				usubtable = std::make_unique<FastLookupMap<K, V>>();
 				usubtable->insert(pair);
-				++m_num_pairs;
 				return true;
 			}
 
@@ -215,6 +232,8 @@ public:
 			}
 			else
 			{
+				upgrade_to_unique_lock<shared_mutex> uniqueLock(rb_lock);	// exclusive-access with write-lock
+
 				auto capacity = usubtable->capacity();									// (mj)
 				auto new_capacity = 2 * std::max<size_t>(1, capacity);					// (mj)
 				auto new_subtable_bucket_count = 2 * new_capacity * (new_capacity - 1);	// (sj)
@@ -240,27 +259,29 @@ public:
 				}
 				else
 				{
-					fullRehash(lock, pair);
+					fullRehash(pair);
 				}
 			}
 		}
 
-		++m_num_pairs;
 		return true;
 	}
 
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
-		boost::upgrade_lock<boost::shared_mutex> lock(m_access_mutex);
+		upgrade_lock<shared_mutex> rb_lock(m_rebuild_mutex);				// unexclusive-access with write-lock
 
 		++m_num_operations;
 
 		if (count(key))
 		{
-			auto& usubtable = getSubtable(key);
-			usubtable->erase(key);
-			--m_num_pairs;
+			unique_lock<shared_mutex> uniqueLock(getSubtableMutex(key));	// exclusive-access with write-lock
+
+			if (!getSubtable(key)->erase(key))
+			{
+				return false;
+			}
 		}
 		else
 		{
@@ -269,7 +290,9 @@ public:
 
 		if (m_num_operations >= m_capacity)
 		{
-			fullRehash(lock);
+			upgrade_to_unique_lock<shared_mutex> uniqueLock(rb_lock);		// exclusive-access with write-lock
+
+			fullRehash();
 		}
 
 		return true;
@@ -278,7 +301,8 @@ public:
 	// return the value matching key
 	V at(const K& key)
 	{
-		boost::shared_lock<boost::shared_mutex> lock(m_access_mutex);
+		shared_lock<shared_mutex> rb_lock(m_rebuild_mutex);			// unexclusive-access with read-lock
+		shared_lock<shared_mutex> st_lock(getSubtableMutex(key));	// unexclusive-access with read-lock
 
 		if (!count(key)) throw std::out_of_range("FastMap::at");
 		auto& usubtable = getSubtable(key);
@@ -288,44 +312,73 @@ public:
 	// return 1 if pair matching key is in table, else return 0
 	size_t count(const K& key)
 	{
-		boost::shared_lock<boost::shared_mutex> lock(m_access_mutex);
+		shared_lock<shared_mutex> rb_lock(m_rebuild_mutex);			// unexclusive-access with read-lock
+		shared_lock<shared_mutex> st_lock(getSubtableMutex(key));	// unexclusive-access with read-lock
 
 		auto& usubtable = getSubtable(key);
 		return !usubtable ? 0 : usubtable->count(key);
 	}
 
-	size_t size() const
+	size_t size()
 	{
-		return m_num_pairs;
+		shared_lock<shared_mutex> rb_lock(m_rebuild_mutex);			// unexclusive-access with read-lock
+
+		size_t num_pairs = 0;
+		for (size_t i = 0; i < m_table.size(); ++i)
+		{
+			shared_lock<shared_mutex> st_lock(*m_subtable_mutex[i]);// unexclusive-access with read-lock
+			if (m_table[i] != nullptr)
+			{
+				num_pairs += m_table[i]->size();
+			}
+		}
+		return num_pairs;
 	}
 
 //private:
 
+	// no locking version
+	size_t sizeNL() const
+	{
+		size_t num_pairs = 0;
+		for (size_t i = 0; i < m_table.size(); ++i)
+		{
+			if (m_table[i] != nullptr)
+			{
+				num_pairs += m_table[i]->size();
+			}
+		}
+		return num_pairs;
+	}
+
 	// convenience functions for getting the unique_ptr for a key
 	subtable_t& getSubtable(const K& key)
 	{
-		return m_table.at(m_hash(key));
+		return m_table.at(hashKey(m_hash, key));
 	}
 
 	const subtable_t& getSubtable(const K& key) const
 	{
-		return m_table.at(m_hash(key));
+		return m_table.at(hashKey(m_hash, key));
 	}
 
-	void fullRehash(boost::upgrade_lock<boost::shared_mutex>& lock, const pair_t& new_pair)
+	shared_mutex& getSubtableMutex(const K& key)
 	{
-		fullRehash(lock, std::make_unique<pair_t>(new_pair));
+		return *m_subtable_mutex.at(hashKey(m_hash, key));
 	}
 
-	void fullRehash(boost::upgrade_lock<boost::shared_mutex>& lock, upair_t new_upair = upair_t())
+	void fullRehash(const pair_t& new_pair)
 	{
-		boost::upgrade_to_unique_lock<boost::shared_mutex> uniqueLock(lock);
+		fullRehash(std::make_unique<pair_t>(new_pair));
+	}
 
+	void fullRehash(upair_t new_upair = upair_t())
+	{
 		upair_list_t upair_list;
 		std::vector<size_t> hash_distribution;
 		hashed_upair_list_t hashed_upair_list;
 
-		size_t num_pairs = this->size();
+		size_t num_pairs = this->sizeNL();
 		upair_list.reserve(num_pairs + 1);
 
 		moveTableToList(m_table, upair_list);
@@ -340,6 +393,11 @@ public:
 		m_capacity = (1 + m_C) * std::max(num_pairs, size_t(4));	// (M) Calculate new element number threshold
 		auto bucket_count = s(m_capacity);							// (s(M)) Calculate new number of partitions/buckets in Top Level Table
 		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
+		m_subtable_mutex.resize(bucket_count);
+		for (auto& umutex : m_subtable_mutex)
+		{
+			if (umutex == nullptr) umutex = std::make_unique<shared_mutex>();
+		}
 
 		m_hash = findBalancedHash(upair_list, m_table.size(), calculateDPHThresh(), hash_distribution);
 
@@ -492,9 +550,9 @@ public:
 	table_t m_table;                // internal hash table
 	hash_t m_hash;                  // hash function
 	size_t m_capacity;				// (M) Threshold for total number of elements in Table
-	std::atomic<size_t> m_num_pairs;// how many pairs are currently stored
-	boost::shared_mutex m_access_mutex;
-	size_t m_num_operations;
+	std::atomic<size_t> m_num_operations;
+	shared_mutex m_rebuild_mutex;
+	std::vector<std::unique_ptr<shared_mutex>> m_subtable_mutex;
 	// Constants
 	size_t m_C;						// Growth of M
 	size_t m_SM_SCALING;			// Growth of Partitions/Buckets in Top Level Table

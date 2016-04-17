@@ -10,8 +10,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <boost/thread/locks.hpp>
-#include <boost/thread/shared_mutex.hpp>
 #include "random_utils.h"
 
 template<class K, class V>
@@ -160,10 +158,8 @@ public:
 	// try to insert pair into the hash table, rebuilding if necessary
 	bool insert(upair_t pair)
 	{
-		boost::unique_lock<boost::shared_mutex> lock(m_access_mutex);
-
 		// key already exists, do nothing
-		if (countNL(pair->first))
+		if (count(pair->first))
 		{
 			//throw std::exception();	// FastMap's insert logic shouldn't allow us to get here
 			return false;
@@ -190,10 +186,8 @@ public:
 
 	// remove pair matching key from the table
 	size_t erase(const K& key)
-	{
-		boost::unique_lock<boost::shared_mutex> lock(m_access_mutex);
-		
-		if (!countNL(key))
+	{		
+		if (!count(key))
 		{
 			//throw std::exception();	// FastMap's insert logic shouldn't allow us to get here
 			return 0;
@@ -206,15 +200,15 @@ public:
 	// return the value matching key
 	const V& at(const K& key)
 	{
-		boost::shared_lock<boost::shared_mutex> lock(m_access_mutex);
-		return atNL(key);
+		if (!count(key)) throw std::out_of_range("FastLookupMap::at");
+		return getBucket(key)->second;
 	}
 
 	// return 1 if pair matching key is in table, else return 0
-	size_t count(const K& key)
+	size_t count(const K& key) const
 	{
-		boost::shared_lock<boost::shared_mutex> lock(m_access_mutex);
-		return countNL(key);
+		const upair_t& bucket = getBucket(key);
+		return bucket && bucket->first == key;
 	}
 	
 	size_t size() const
@@ -237,20 +231,6 @@ public:
 	hash_t getHash() const
 	{
 		return m_hash;
-	}
-
-	// no lock version
-	const V& atNL(const K& key)
-	{
-		if (!countNL(key)) throw std::out_of_range("FastLookupMap::at");
-		return getBucket(key)->second;
-	}
-	
-	// no lock version
-	size_t countNL(const K& key) const
-	{
-		const upair_t& bucket = getBucket(key);
-		return bucket && bucket->first == key;
 	}
 	
 	bool isCollision(const K& key) const
@@ -428,11 +408,10 @@ public:
 		return cend();
 	}
 
-	table_t m_table;				// internal hash table
-	hash_t m_hash;					// hash function
-	std::atomic<size_t> m_capacity;	// how many pairs can be stored without rebuilding
-	std::atomic<size_t> m_num_pairs;// how many pairs are currently stored
-	boost::shared_mutex m_access_mutex;
+	table_t m_table;		// internal hash table
+	hash_t m_hash;			// hash function
+	size_t m_capacity;		// how many pairs can be stored without rebuilding
+	size_t m_num_pairs;		// how many pairs are currently stored
 };
 
 #endif
