@@ -133,14 +133,7 @@ public:
 	FastLookupMap(Iter first, Iter last)
 		: m_num_pairs{ 0 }
 	{
-		auto num_pairs = std::distance(first, last);			// bj O(n)
-		m_capacity = 2 * std::max<size_t>(1, num_pairs);		// mj
-		auto bucket_count = 2 * m_capacity * (m_capacity - 1);	// sj
-
-		m_table.resize(bucket_count);
-
-		m_hash = calculateHash(first, last, bucket_count);
-		insert(first, last);
+		rebuildTable(first, last);
 	}
 
 	// try to insert pair into the hash table, rebuilding if necessary
@@ -362,6 +355,27 @@ public:
 		{
 			getBucket(it->get()->first) = std::move(*it);
 		}
+	}
+
+	template<class Iter>
+	void rebuildTable(Iter first, Iter last)
+	{
+		for (auto& upair : m_table)
+		{
+			upair.reset();
+		}
+
+		m_num_pairs = 0;	// don't set equal to distance in case there are duplicates
+
+		// New calculations assume no duplicates, which should be valid if called by FastMap
+		auto num_pairs = std::distance(first, last);			// bj O(n)
+		m_capacity = 2 * std::max<size_t>(1, num_pairs);		// mj
+		auto bucket_count = 2 * m_capacity * (m_capacity - 1);	// sj
+
+		m_table.resize(bucket_count);
+
+		m_hash = calculateHash(first, last, bucket_count);
+		insert(first, last);
 	}
 
 	iterator begin()
