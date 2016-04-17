@@ -1,11 +1,14 @@
 #ifndef FAST_MAP_H
 #define FAST_MAP_H
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <stdexcept>
 #include <utility>
 #include <vector>
+#include <boost/thread/locks.hpp>
+#include <boost/thread/shared_mutex.hpp>
 #include "fast_lookup_map.h"
 
 template <class K, class V>
@@ -149,18 +152,15 @@ public:
 		m_hash = random_hash<K>(bucket_count);
 	}
 
-	size_t size() const
-	{
-		return m_num_pairs;
-	}
-
 	// try to insert pair into the hash table
 	bool insert(const pair_t& pair)
 	{
+		boost::upgrade_lock<boost::shared_mutex> lock(m_access_mutex);
+
 		++m_num_operations;
 		if (m_num_operations > m_capacity)
 		{
-			fullRehash(pair);
+			fullRehash(lock, pair);
 		}
 		else
 		{
@@ -220,7 +220,7 @@ public:
 				}
 				else
 				{
-					fullRehash(pair);
+					fullRehash(lock, pair);
 				}
 			}
 		}
@@ -232,6 +232,8 @@ public:
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
+		boost::upgrade_lock<boost::shared_mutex> lock(m_access_mutex);
+
 		++m_num_operations;
 
 		if (count(key))
@@ -247,25 +249,34 @@ public:
 
 		if (m_num_operations >= m_capacity)
 		{
-			fullRehash();
+			fullRehash(lock);
 		}
 
 		return true;
 	}
 
 	// return the value matching key
-	V at(const K& key) const
+	V at(const K& key)
 	{
+		boost::shared_lock<boost::shared_mutex> lock(m_access_mutex);
+
 		if (!count(key)) throw std::out_of_range("FastMap::at");
 		auto& usubtable = getSubtable(key);
 		return !usubtable ? 0 : usubtable->at(key);
 	}
 
 	// return 1 if pair matching key is in table, else return 0
-	size_t count(const K& key) const
+	size_t count(const K& key)
 	{
+		boost::shared_lock<boost::shared_mutex> lock(m_access_mutex);
+
 		auto& usubtable = getSubtable(key);
 		return !usubtable ? 0 : usubtable->count(key);
+	}
+
+	size_t size() const
+	{
+		return m_num_pairs;
 	}
 
 //private:
@@ -281,13 +292,15 @@ public:
 		return m_table.at(m_hash(key));
 	}
 
-	void fullRehash(const pair_t& new_pair)
+	void fullRehash(boost::upgrade_lock<boost::shared_mutex>& lock, const pair_t& new_pair)
 	{
-		fullRehash(std::make_unique<pair_t>(new_pair));
+		fullRehash(lock, std::make_unique<pair_t>(new_pair));
 	}
 
-	void fullRehash(upair_t new_upair = upair_t())
+	void fullRehash(boost::upgrade_lock<boost::shared_mutex>& lock, upair_t new_upair = upair_t())
 	{
+		boost::upgrade_to_unique_lock<boost::shared_mutex> uniqueLock(lock);
+
 		upair_list_t upair_list;
 		std::vector<size_t> hash_distribution;
 		hashed_upair_list_t hashed_upair_list;
@@ -459,7 +472,8 @@ public:
 	table_t m_table;                // internal hash table
 	hash_t m_hash;                  // hash function
 	size_t m_capacity;				// (M) Threshold for total number of elements in Table
-	size_t m_num_pairs;             // how many pairs are currently stored
+	std::atomic<size_t> m_num_pairs;// how many pairs are currently stored
+	boost::shared_mutex m_access_mutex;
 	size_t m_num_operations;
 	// Constants
 	size_t m_C;						// Growth of M

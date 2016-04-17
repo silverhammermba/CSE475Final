@@ -3,6 +3,8 @@
 #define TEST_FAST_MAP_H
 
 #include <vector>
+#include <boost/thread/locks.hpp>
+#include <boost/thread/shared_mutex.hpp>
 #include "fast_map.h"
 #include "gtest_include.h"
 
@@ -151,7 +153,9 @@ TEST_F(AFastMap, CanBeRebuiltFully)
 
 	for (const auto& pair : pairs) m_map.insert(pair);
 
-	m_map.fullRehash();
+	boost::shared_mutex mutex;
+	boost::upgrade_lock<boost::shared_mutex> lock(mutex);
+	m_map.fullRehash(lock);
 
 	EXPECT_EQ((size_t)count, m_map.size());
 	

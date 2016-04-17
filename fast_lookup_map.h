@@ -1,6 +1,7 @@
 #ifndef FAST_LOOKUP_MAP_H
 #define FAST_LOOKUP_MAP_H
 
+#include <atomic>
 #include <cstddef>
 #include <functional>
 #include <iterator>
@@ -159,10 +160,10 @@ public:
 	// try to insert pair into the hash table, rebuilding if necessary
 	bool insert(upair_t pair)
 	{
-		boost::unique_lock<boost::shared_mutex> lock(write_mutex);
+		boost::unique_lock<boost::shared_mutex> lock(m_access_mutex);
 
 		// key already exists, do nothing
-		if (count(pair->first))
+		if (countNL(pair->first))
 		{
 			//throw std::exception();	// FastMap's insert logic shouldn't allow us to get here
 			return false;
@@ -190,7 +191,9 @@ public:
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
-		if (!count(key))
+		boost::unique_lock<boost::shared_mutex> lock(m_access_mutex);
+		
+		if (!countNL(key))
 		{
 			//throw std::exception();	// FastMap's insert logic shouldn't allow us to get here
 			return 0;
@@ -203,25 +206,17 @@ public:
 	// return the value matching key
 	const V& at(const K& key)
 	{
-		boost::shared_lock<boost::shared_mutex> lock(write_mutex);
-
-		if (!count(key)) throw std::out_of_range("FastLookupMap::at");
-		return getBucket(key)->second;
+		boost::shared_lock<boost::shared_mutex> lock(m_access_mutex);
+		return atNL(key);
 	}
 
 	// return 1 if pair matching key is in table, else return 0
-	size_t count(const K& key) const
+	size_t count(const K& key)
 	{
-		const upair_t& bucket = getBucket(key);
-		return bucket && bucket->first == key;
+		boost::shared_lock<boost::shared_mutex> lock(m_access_mutex);
+		return countNL(key);
 	}
-
-	bool isCollision(const K& key) const
-	{
-		const upair_t& bucket = getBucket(key);
-		return bucket && bucket->first != key;
-	}
-
+	
 	size_t size() const
 	{
 		return m_num_pairs;		// bj
@@ -237,12 +232,32 @@ public:
 		return m_table.size();	// sj, also number of partitions/bucket count
 	}
 
+// private
+
 	hash_t getHash() const
 	{
 		return m_hash;
 	}
 
-// private
+	// no lock version
+	const V& atNL(const K& key)
+	{
+		if (!countNL(key)) throw std::out_of_range("FastLookupMap::at");
+		return getBucket(key)->second;
+	}
+	
+	// no lock version
+	size_t countNL(const K& key) const
+	{
+		const upair_t& bucket = getBucket(key);
+		return bucket && bucket->first == key;
+	}
+	
+	bool isCollision(const K& key) const
+	{
+		const upair_t& bucket = getBucket(key);
+		return bucket && bucket->first != key;
+	}
 
 	// convenience functions for getting the unique_ptr for a key
 	inline upair_t& getBucket(const K& key)
@@ -328,7 +343,7 @@ public:
 	void rebuildTable()
 	{
 		// if we're over capacity, double it
-		while (m_num_pairs > m_capacity) m_capacity *= 2;
+		while (m_num_pairs > m_capacity) m_capacity = m_capacity * 2;
 		auto new_table_size = calculateTableSize();
 
 		m_hash = calculateHash(this->begin(), this->end(), new_table_size);
@@ -413,11 +428,11 @@ public:
 		return cend();
 	}
 
-	table_t m_table;    // internal hash table
-	hash_t m_hash;      // hash function
-	size_t m_capacity;  // how many pairs can be stored without rebuilding
-	size_t m_num_pairs; // how many pairs are currently stored
-	boost::shared_mutex write_mutex;
+	table_t m_table;				// internal hash table
+	hash_t m_hash;					// hash function
+	std::atomic<size_t> m_capacity;	// how many pairs can be stored without rebuilding
+	std::atomic<size_t> m_num_pairs;// how many pairs are currently stored
+	boost::shared_mutex m_access_mutex;
 };
 
 #endif
