@@ -144,8 +144,8 @@ public:
 		// Could call fullRehash here instead to reuse code
 		// Performed here now, otherwise a fullRehash would occur and do same operation after first insert
 		m_capacity = (1 + m_C) * std::max(this->size(), size_t(4));	// Calculate new element count threshold
-		auto bucket_count = s(m_capacity);								// Calculate new number of partitions/buckets in Top Level Table
-		m_table.resize(bucket_count);							// Grow table if needed to accomodate new number of partitions/buckets
+		auto bucket_count = s(m_capacity);							// Calculate new number of partitions/buckets in Top Level Table
+		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
 		m_hash = random_hash<K>(bucket_count);
 	}
 
@@ -312,10 +312,20 @@ public:
 
 		hashUpairList(upair_list, hashed_upair_list, m_hash, hash_distribution);
 
-		// Destruct Fast Lookup Map and reconstruct via hashed element list
+		// Reconstruct via hashed element list
 		for (size_t i = 0; i < m_table.size(); ++i)
 		{
-			m_table[i].reset(new FastLookupMap<K, V>(hashed_upair_list[i].begin(), hashed_upair_list[i].end()));
+			if (m_table[i] == nullptr)
+			{
+				if (hash_distribution[i] != 0)
+				{
+					m_table[i] = std::make_unique<FastLookupMap<K, V>>(hashed_upair_list[i].begin(), hashed_upair_list[i].end());
+				}
+			}
+			else
+			{
+				m_table[i]->rebuildTable(hashed_upair_list[i].begin(), hashed_upair_list[i].end());
+			}
 		}
 
 		m_num_operations = 0;
