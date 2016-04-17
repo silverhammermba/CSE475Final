@@ -6,7 +6,6 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
-
 #include "fast_lookup_map.h"
 
 template <class K, class V>
@@ -15,12 +14,11 @@ class FastMap
 public:
 	typedef std::function<size_t(K)> hash_t;
 	typedef std::pair<const K, V> pair_t;
+	typedef std::unique_ptr<pair_t> upair_t;
+	typedef std::vector<upair_t> upair_list_t;
+	typedef std::vector<upair_list_t> hashed_upair_list_t;
 	typedef std::unique_ptr<FastLookupMap<K, V>> subtable_t;
 	typedef std::vector<subtable_t> table_t;
-
-	typedef std::unique_ptr<pair_t> element_t;
-	typedef std::vector<element_t> element_list_t;
-	typedef std::vector<element_list_t> hashed_element_list_t;
 
 	template <class T>
 	class ForwardIterator
@@ -35,25 +33,25 @@ public:
 		i_itr_t inner_it;
 
 		// check if outer_it/inner_it are in a valid state
-		inline bool is_valid() const
+		inline bool isValid() const
 		{
 			// either outer_it as at the end or it is pointing to a nonempty FastLookupMap and inner_it is pointing to a pair
 			return outer_it == outer_end || (*outer_it && inner_it != (*outer_it)->end());
 		}
 
 		// check if outer_it can be used to get a FastLookupMap
-		inline bool outer_can_deref() const
+		inline bool outerCanDeref() const
 		{
 			return outer_it != outer_end && *outer_it;
 		}
 
 		// ensure we are in a valid state (by updating outer_it/inner_it)
-		inline void make_valid()
+		inline void makeValid()
 		{
-			while (!is_valid())
+			while (!isValid())
 			{
 				++outer_it; // go to the next bucket
-				if (outer_can_deref()) inner_it = (*outer_it)->begin();
+				if (outerCanDeref()) inner_it = (*outer_it)->begin();
 			}
 		}
 
@@ -61,8 +59,8 @@ public:
 		explicit ForwardIterator(const o_itr_t& _outer_it, const o_itr_t& _outer_end)
 			: outer_it{ _outer_it }, outer_end{ _outer_end }
 		{
-			if (outer_can_deref()) inner_it = (*outer_it)->begin();
-			make_valid();
+			if (outerCanDeref()) inner_it = (*outer_it)->begin();
+			makeValid();
 		}
 
 	public:
@@ -94,7 +92,7 @@ public:
 		const ForwardIterator& operator++()
 		{
 			++inner_it;
-			make_valid();
+			makeValid();
 
 			return *this;
 		}
@@ -105,7 +103,7 @@ public:
 			ForwardIterator prev{ outer_it, outer_end, inner_it };
 
 			++inner_it;
-			make_valid();
+			makeValid();
 
 			return prev;
 		}
@@ -138,17 +136,17 @@ public:
 	typedef ForwardIterator<const pair_t> const_iterator;
 
 	FastMap()
-		: m_c(2),
+		: m_C(2),
 		m_SM_SCALING(1),
 		m_num_pairs(0),
 		m_num_operations(0)
 	{
-		// Could call full_rebuild here instead to reuse code
-		// Performed here now, otherwise a full_rebuild would occur and do same operation after first insert
-		m_M = (1 + m_c) * std::max(this->size(), size_t(4));	// Calculate new element number threshold
-		auto num_partitions = s(m_M);							// Calculate new number of partitions/buckets in Top Level Table
-		m_table.resize(num_partitions);							// Grow table if needed to accomodate new number of partitions/buckets
-		m_hash = random_hash<K>(num_partitions);
+		// Could call fullRehash here instead to reuse code
+		// Performed here now, otherwise a fullRehash would occur and do same operation after first insert
+		m_capacity = (1 + m_C) * std::max(this->size(), size_t(4));	// Calculate new element count threshold
+		auto bucket_count = s(m_capacity);								// Calculate new number of partitions/buckets in Top Level Table
+		m_table.resize(bucket_count);							// Grow table if needed to accomodate new number of partitions/buckets
+		m_hash = random_hash<K>(bucket_count);
 	}
 
 	size_t size() const
@@ -160,14 +158,14 @@ public:
 	bool insert(const pair_t& pair)
 	{
 		++m_num_operations;
-		if (m_num_operations > m_M)
+		if (m_num_operations > m_capacity)
 		{
-			full_rebuild(pair);
+			fullRehash(pair);
 		}
 		else
 		{
-			auto bucket = hash_key(m_hash, pair);
-			auto& subtable = m_table.at(bucket);										// Hash key to get bucket
+			auto bucket = hashKey(m_hash, pair);
+			auto& subtable = getSubtable(pair.first);
 
 			// If subtable doesn't exist create it, insert the element, and return
 			if (subtable == nullptr)
@@ -178,7 +176,7 @@ public:
 				return true;
 			}
 
-			// If the value exists in the subtable return
+			// If the key exists in the subtable return
 			if (subtable->count(pair.first))
 			{
 				return false;
@@ -186,43 +184,43 @@ public:
 
 			if (subtable->size() + 1 <= subtable->capacity())
 			{
-				if (!subtable->is_collision(pair.first))
+				if (!subtable->isCollision(pair.first))
 				{
 					subtable->insert(pair);
 				}
 				else
 				{
-					subtable->rebuild_table(subtable->bucket_count(), std::make_unique<pair_t>(pair));
+					subtable->rebuildTable(subtable->bucketCount(), std::make_unique<pair_t>(pair));
 				}				
 			}
 			else
 			{
-				auto capacity = subtable->capacity();									// mj
-				auto new_capacity = 2 * std::max<size_t>(1, capacity);					// mj
-				auto new_subtable_bucket_count = 2 * new_capacity * (new_capacity - 1);	// sj
+				auto capacity = subtable->capacity();									// (mj)
+				auto new_capacity = 2 * std::max<size_t>(1, capacity);					// (mj)
+				auto new_subtable_bucket_count = 2 * new_capacity * (new_capacity - 1);	// (sj)
 
 				// Calculate new accumulated subtable allocation
-				size_t sj_sum = 0;
+				size_t total_bucket_count = 0;											// (sum of sj)
 				for (size_t i = 0; i < m_table.size(); ++i)
 				{
 					if (i == bucket)
 					{
-						sj_sum += new_subtable_bucket_count;
+						total_bucket_count += new_subtable_bucket_count;
 					}
 					else if (m_table[i] != nullptr)
 					{
-						sj_sum += m_table[i]->bucket_count();
+						total_bucket_count += m_table[i]->bucketCount();
 					}	
 				}
 
-				auto dph_thresh = calculate_dph_thresh();
-				if (sj_sum <= dph_thresh)
+				auto dph_thresh = calculateDPHThresh();
+				if (total_bucket_count <= dph_thresh)
 				{
-					subtable->rebuild_table(new_subtable_bucket_count, std::make_unique<pair_t>(pair));
+					subtable->rebuildTable(new_subtable_bucket_count, std::make_unique<pair_t>(pair));
 				}
 				else
 				{
-					full_rebuild(pair);
+					fullRehash(pair);
 				}
 			}
 		}
@@ -236,7 +234,7 @@ public:
 	{
 		++m_num_operations;
 
-		auto& ptr = ptr_at(key);
+		auto& ptr = getSubtable(key);
 		auto ret = !ptr ? 0 : ptr->erase(key);
 		if (ret) --m_num_pairs;
 		return ret;
@@ -246,175 +244,190 @@ public:
 	V at(const K& key) const
 	{
 		if (!count(key)) throw std::out_of_range("FastMap::at");
-		auto& ptr = ptr_at(key);
+		auto& ptr = getSubtable(key);
 		return !ptr ? 0 : ptr->at(key);
 	}
 
 	// return 1 if pair matching key is in table, else return 0
 	size_t count(const K& key) const
 	{
-		auto& ptr = ptr_at(key);
+		auto& ptr = getSubtable(key);
 		return !ptr ? 0 : ptr->count(key);
 	}
 	
+//private:
+
 	// convenience functions for getting the unique_ptr for a key
-	subtable_t& ptr_at(const K& key)
+	subtable_t& getSubtable(const K& key)
+	{
+		return m_table.at(m_hash(key));
+	}
+	
+	const subtable_t& getSubtable(const K& key) const
 	{
 		return m_table.at(m_hash(key));
 	}
 
-	const subtable_t& ptr_at(const K& key) const
+	void fullRehash(const pair_t& new_pair)
 	{
-		return m_table.at(m_hash(key));
+		fullRehash(std::make_unique<pair_t>(new_pair));
 	}
-
-	void full_rebuild(const pair_t& new_pair)
+	
+	void fullRehash(upair_t new_upair = upair_t())
 	{
-		full_rebuild(std::make_unique<pair_t>(new_pair));
-	}
-	void full_rebuild(element_t new_element = element_t())
-	{
-		element_list_t element_list;
+		upair_list_t upair_list;
 		std::vector<size_t> hash_distribution;
-		hashed_element_list_t hashed_element_list;
+		hashed_upair_list_t hashed_upair_list;
 
-		size_t num_elements = this->size();
-		element_list.reserve(num_elements + 1);
+		size_t num_pairs = this->size();
+		upair_list.reserve(num_pairs + 1);
 
-		move_table_to_list(m_table, element_list);
+		moveTableToList(m_table, upair_list);
 
-		// If arg new_element exists, push onto list and update count
-		if (new_element != nullptr)
+		// If arg new_upair exists, push onto list and update count
+		if (new_upair != nullptr)
 		{
-			element_list.emplace_back(std::move(new_element));
-			++num_elements;
+			upair_list.emplace_back(std::move(new_upair));
+			++num_pairs;
 		}
 
-		m_M = (1 + m_c) * std::max(num_elements, size_t(4));	// Calculate new element number threshold
-		auto num_partitions = s(m_M);							// Calculate new number of partitions/buckets in Top Level Table
-		m_table.resize(num_partitions);							// Grow table if needed to accomodate new number of partitions/buckets
+		m_capacity = (1 + m_C) * std::max(num_pairs, size_t(4));	// (M) Calculate new element number threshold
+		auto bucket_count = s(m_capacity);							// (s(M)) Calculate new number of partitions/buckets in Top Level Table
+		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
 
-		m_hash = find_balanced_hash(element_list, m_table.size(), calculate_dph_thresh(), hash_distribution);
+		m_hash = findBalancedHash(upair_list, m_table.size(), calculateDPHThresh(), hash_distribution);
 
-		hash_element_list(element_list, hashed_element_list, m_hash, hash_distribution);
+		hashUpairList(upair_list, hashed_upair_list, m_hash, hash_distribution);
 
 		// Destruct Fast Lookup Map and reconstruct via hashed element list
 		for (size_t i = 0; i < m_table.size(); ++i)
 		{
-			m_table[i].reset(new FastLookupMap<K, V>(hashed_element_list[i].begin(), hashed_element_list[i].end()));
+			m_table[i].reset(new FastLookupMap<K, V>(hashed_upair_list[i].begin(), hashed_upair_list[i].end()));
 		}
 
 		m_num_operations = 0;
 	}
-	void move_table_to_list(table_t& table, element_list_t& element_list)
+	
+	void moveTableToList(table_t& table, upair_list_t& upair_list)
 	{
 		// Can't use iterators, as they dereference unique_ptr and we want to deep copy them
 
-		for (auto& bucket1 : table) // iterate over fast_map buckets
+		for (auto& usubtable : table) // iterate over FastMap buckets
 		{
-			if (bucket1 != nullptr)
+			if (usubtable != nullptr)
 			{
-				auto& slt = *bucket1.get();
-				for (auto& u_pair : slt.m_table) // iterate over perfect_table buckets
+				auto& subtable = *usubtable.get();
+				for (auto& upair : subtable.m_table) // iterate over perfect_table buckets
 				{
-					if (u_pair != nullptr)
+					if (upair != nullptr)
 					{
-						element_list.emplace_back(std::move(u_pair));
+						upair_list.emplace_back(std::move(upair));
 					}
 				}
 			}
 		}
 	}
-	hash_t find_balanced_hash(const element_list_t& element_list, size_t num_buckets, double dph_thresh, std::vector<size_t>& hash_distribution)
+	
+	hash_t findBalancedHash(const upair_list_t& upair_list, size_t num_buckets, double dph_thresh, std::vector<size_t>& hash_distribution)
 	{
 		hash_t hash;
-		size_t sj_sum;
+		size_t total_bucket_count;
 		hash_distribution.resize(num_buckets);
 
 		do
 		{
 			// Reset variables declared outside loop
-			sj_sum = 0;
+			total_bucket_count = 0;
 			std::fill(hash_distribution.begin(), hash_distribution.end(), 0);
 
 			hash = random_hash<K>(num_buckets);
 
 			// Calculate hash distribution
-			for (const auto& x : element_list)
+			for (const auto& x : upair_list)
 			{
 				++hash_distribution.at(hash(x->first));
 			}
 
-			// Determine size of resulting sub-tables
+			// Determine number of buckets in resulting subtables
 			for (size_t i = 0; i < num_buckets; ++i)
 			{
-				auto bj = hash_distribution[i]; // count of elements in sub-table
-				auto mj = 2 * bj;               // capacity of sub-table
-				sj_sum += 2 * mj * (mj - 1);    // cumulative size of sub-table
+				auto size = hash_distribution[i];						// (bj) count of elements in subtable
+				auto capacity = 2 * size;								// (mj) capacity of subtable
+				total_bucket_count += 2 * capacity * (capacity - 1);	// (sj sum) cumulative bucket count of subtables
 			}
 
-		} while (sj_sum > dph_thresh);
+		} while (total_bucket_count > dph_thresh);
 
 		return hash;
 	}
-	void hash_element_list(element_list_t& element_list, hashed_element_list_t& hashed_element_list, hash_t hash, const std::vector<size_t>& hash_distribution)
+	
+	void hashUpairList(upair_list_t& upair_list, hashed_upair_list_t& hashed_upair_list, hash_t hash, const std::vector<size_t>& hash_distribution)
 	{
-		hashed_element_list.resize(hash_distribution.size());
+		hashed_upair_list.resize(hash_distribution.size());
 
 		// Reserve each hashed element list to its expected count
 		for (size_t i = 0; i < hash_distribution.size(); ++i)
 		{
-			hashed_element_list[i].reserve(hash_distribution[i]);
+			hashed_upair_list[i].reserve(hash_distribution[i]);
 		}
 
 		// Distribute full element list over 2D hashed element list
-		for (auto& e : element_list)
+		for (auto& e : upair_list)
 		{
-			hashed_element_list.at(hash(e->first)).emplace_back(std::move(e));
+			hashed_upair_list.at(hash(e->first)).emplace_back(std::move(e));
 		}
 	}
-	double calculate_dph_thresh()
+	
+	double calculateDPHThresh()
 	{
-		return ((32.0 * std::pow(m_M, 2)) / m_table.size()) + 4.0 * m_M;
+		return ((32.0 * std::pow(m_capacity, 2)) / m_table.size()) + 4.0 * m_capacity;
 	}
+	
 	size_t s(size_t M) const
 	{
 		return m_SM_SCALING * M;
 	}
 
-	size_t hash_key(hash_t hash, const K& key) const
+	size_t hashKey(hash_t hash, const K& key) const
 	{
 		return hash(key);
 	}
-	size_t hash_key(hash_t hash, const pair_t& pair) const
+	
+	size_t hashKey(hash_t hash, const pair_t& pair) const
 	{
-		return hash_key(hash, pair.first);
+		return hashKey(hash, pair.first);
 	}
-	size_t hash_key(hash_t hash, const element_t& pair) const
+	
+	size_t hashKey(hash_t hash, const upair_t& pair) const
 	{
-		return hash_key(hash, pair->first);
+		return hashKey(hash, pair->first);
 	}
 
 	iterator begin()
 	{
 		return iterator(m_table.cbegin(), m_table.cend());
 	}
+	
 	iterator end()
 	{
 		return iterator(m_table.cend(), m_table.cend());
 	}
+	
 	const_iterator cbegin() const
 	{
 		return const_iterator(m_table.cbegin(), m_table.cend());
 	}
+	
 	const_iterator cend() const
 	{
 		return const_iterator(m_table.cend(), m_table.cend());
 	}
+	
 	const_iterator begin() const
 	{
 		return cbegin();
 	}
+	
 	const_iterator end() const
 	{
 		return cend();
@@ -422,12 +435,11 @@ public:
 
 	table_t m_table;                // internal hash table
 	hash_t m_hash;                  // hash function
+	size_t m_capacity;				// (M) Threshold for total number of elements in Table
 	size_t m_num_pairs;             // how many pairs are currently stored
 	size_t m_num_operations;
-	size_t m_M;						// Threshold for total number of elements in Table
-
 	// Constants
-	size_t m_c;						// Growth of M
+	size_t m_C;						// Growth of M
 	size_t m_SM_SCALING;			// Growth of Partitions/Buckets in Top Level Table
 };
 

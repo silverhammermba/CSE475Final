@@ -128,7 +128,7 @@ TEST_F(AFastMap, CanBeRebuiltFully)
 
 	for (const auto& pair : pairs) m_map.insert(pair);
 
-	m_map.full_rebuild();
+	m_map.fullRehash();
 
 	EXPECT_EQ(count, m_map.size());
 	
