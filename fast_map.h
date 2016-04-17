@@ -234,10 +234,23 @@ public:
 	{
 		++m_num_operations;
 
-		auto& usubtable = getSubtable(key);
-		auto ret = !usubtable ? 0 : usubtable->erase(key);
-		if (ret) --m_num_pairs;
-		return ret;
+		if (count(key))
+		{
+			auto& usubtable = getSubtable(key);
+			usubtable->erase(key);
+			--m_num_pairs;
+		}
+		else
+		{
+			return false;
+		}
+
+		if (m_num_operations >= m_capacity)
+		{
+			fullRehash();
+		}
+
+		return true;
 	}
 
 	// return the value matching key

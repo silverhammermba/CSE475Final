@@ -194,7 +194,11 @@ public:
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
-		if (!count(key)) return 0;
+		if (!count(key))
+		{
+			//throw std::exception();	// FastMap's insert logic shouldn't allow us to get here
+			return 0;
+		}
 		--m_num_pairs;
 		getBucket(key).reset();
 		return 1;

@@ -118,6 +118,29 @@ TEST_F(AFastMap, CanInsertManyPairs)
 	}
 }
 
+TEST_F(AFastMap, CanEraseManyPairs)
+{
+	size_t count = 1000;
+
+	std::vector<std::pair<int, int>> pairs;
+	for (size_t i = 0; i < count; ++i)
+		pairs.push_back(std::make_pair(int(i), -int(i)));
+
+	for (const auto& pair : pairs) m_map.insert(pair);
+
+	for (const auto& pair : pairs) ASSERT_EQ(1u, m_map.erase(pair.first));
+
+	// table rebuilds during inserts, so only tests elements after all inserts complete
+
+	EXPECT_EQ(0, m_map.size());
+
+	for (const auto& pair : pairs)
+	{
+		EXPECT_EQ(0u, m_map.count(pair.first));
+		EXPECT_THROW(m_map.at(pair.first), std::out_of_range);
+	}
+}
+
 TEST_F(AFastMap, CanBeRebuiltFully)
 {
 	int count = 1000;
