@@ -149,6 +149,26 @@ public:
 		m_hash = random_hash<K>(bucket_count);
 	}
 
+	template <class Iter>
+	FastMap(Iter first, Iter last)
+		: m_C(2),
+		m_SM_SCALING(1),
+		m_num_pairs(0),
+		m_num_operations(0)
+	{
+		// Could call fullRehash here instead to reuse code
+		// Performed here now, otherwise a fullRehash would occur and do same operation after first insert
+		m_capacity = (1 + m_C) * std::max(this->size(), size_t(4));	// Calculate new element count threshold
+		auto bucket_count = s(m_capacity);							// Calculate new number of partitions/buckets in Top Level Table
+		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
+		m_hash = random_hash<K>(bucket_count);
+
+		for (; first != last; ++first)
+		{
+			this->insert(std::move(*first));
+		}
+	}
+
 	size_t size() const
 	{
 		return m_num_pairs;
