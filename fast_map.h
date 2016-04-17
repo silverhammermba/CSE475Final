@@ -165,37 +165,37 @@ public:
 		else
 		{
 			auto bucket = hashKey(m_hash, pair);
-			auto& subtable = getSubtable(pair.first);
+			auto& usubtable = getSubtable(pair.first);
 
 			// If subtable doesn't exist create it, insert the element, and return
-			if (subtable == nullptr)
+			if (usubtable == nullptr)
 			{
-				subtable = std::make_unique<FastLookupMap<K, V>>();
-				subtable->insert(pair);
+				usubtable = std::make_unique<FastLookupMap<K, V>>();
+				usubtable->insert(pair);
 				++m_num_pairs;
 				return true;
 			}
 
 			// If the key exists in the subtable return
-			if (subtable->count(pair.first))
+			if (usubtable->count(pair.first))
 			{
 				return false;
 			}
 
-			if (subtable->size() + 1 <= subtable->capacity())
+			if (usubtable->size() + 1 <= usubtable->capacity())
 			{
-				if (!subtable->isCollision(pair.first))
+				if (!usubtable->isCollision(pair.first))
 				{
-					subtable->insert(pair);
+					usubtable->insert(pair);
 				}
 				else
 				{
-					subtable->rebuildTable(subtable->bucketCount(), std::make_unique<pair_t>(pair));
-				}				
+					usubtable->rebuildTable(usubtable->bucketCount(), std::make_unique<pair_t>(pair));
+				}
 			}
 			else
 			{
-				auto capacity = subtable->capacity();									// (mj)
+				auto capacity = usubtable->capacity();									// (mj)
 				auto new_capacity = 2 * std::max<size_t>(1, capacity);					// (mj)
 				auto new_subtable_bucket_count = 2 * new_capacity * (new_capacity - 1);	// (sj)
 
@@ -210,13 +210,13 @@ public:
 					else if (m_table[i] != nullptr)
 					{
 						total_bucket_count += m_table[i]->bucketCount();
-					}	
+					}
 				}
 
 				auto dph_thresh = calculateDPHThresh();
 				if (total_bucket_count <= dph_thresh)
 				{
-					subtable->rebuildTable(new_subtable_bucket_count, std::make_unique<pair_t>(pair));
+					usubtable->rebuildTable(new_subtable_bucket_count, std::make_unique<pair_t>(pair));
 				}
 				else
 				{
@@ -234,8 +234,8 @@ public:
 	{
 		++m_num_operations;
 
-		auto& ptr = getSubtable(key);
-		auto ret = !ptr ? 0 : ptr->erase(key);
+		auto& usubtable = getSubtable(key);
+		auto ret = !usubtable ? 0 : usubtable->erase(key);
 		if (ret) --m_num_pairs;
 		return ret;
 	}
@@ -244,17 +244,17 @@ public:
 	V at(const K& key) const
 	{
 		if (!count(key)) throw std::out_of_range("FastMap::at");
-		auto& ptr = getSubtable(key);
-		return !ptr ? 0 : ptr->at(key);
+		auto& usubtable = getSubtable(key);
+		return !usubtable ? 0 : usubtable->at(key);
 	}
 
 	// return 1 if pair matching key is in table, else return 0
 	size_t count(const K& key) const
 	{
-		auto& ptr = getSubtable(key);
-		return !ptr ? 0 : ptr->count(key);
+		auto& usubtable = getSubtable(key);
+		return !usubtable ? 0 : usubtable->count(key);
 	}
-	
+
 //private:
 
 	// convenience functions for getting the unique_ptr for a key
@@ -262,7 +262,7 @@ public:
 	{
 		return m_table.at(m_hash(key));
 	}
-	
+
 	const subtable_t& getSubtable(const K& key) const
 	{
 		return m_table.at(m_hash(key));
@@ -272,7 +272,7 @@ public:
 	{
 		fullRehash(std::make_unique<pair_t>(new_pair));
 	}
-	
+
 	void fullRehash(upair_t new_upair = upair_t())
 	{
 		upair_list_t upair_list;
@@ -307,7 +307,7 @@ public:
 
 		m_num_operations = 0;
 	}
-	
+
 	void moveTableToList(table_t& table, upair_list_t& upair_list)
 	{
 		// Can't use iterators, as they dereference unique_ptr and we want to deep copy them
@@ -327,7 +327,7 @@ public:
 			}
 		}
 	}
-	
+
 	hash_t findBalancedHash(const upair_list_t& upair_list, size_t num_buckets, double dph_thresh, std::vector<size_t>& hash_distribution)
 	{
 		hash_t hash;
@@ -360,7 +360,7 @@ public:
 
 		return hash;
 	}
-	
+
 	void hashUpairList(upair_list_t& upair_list, hashed_upair_list_t& hashed_upair_list, hash_t hash, const std::vector<size_t>& hash_distribution)
 	{
 		hashed_upair_list.resize(hash_distribution.size());
@@ -377,12 +377,12 @@ public:
 			hashed_upair_list.at(hash(e->first)).emplace_back(std::move(e));
 		}
 	}
-	
+
 	double calculateDPHThresh()
 	{
 		return ((32.0 * std::pow(m_capacity, 2)) / m_table.size()) + 4.0 * m_capacity;
 	}
-	
+
 	size_t s(size_t M) const
 	{
 		return m_SM_SCALING * M;
@@ -392,12 +392,12 @@ public:
 	{
 		return hash(key);
 	}
-	
+
 	size_t hashKey(hash_t hash, const pair_t& pair) const
 	{
 		return hashKey(hash, pair.first);
 	}
-	
+
 	size_t hashKey(hash_t hash, const upair_t& pair) const
 	{
 		return hashKey(hash, pair->first);
@@ -407,27 +407,27 @@ public:
 	{
 		return iterator(m_table.cbegin(), m_table.cend());
 	}
-	
+
 	iterator end()
 	{
 		return iterator(m_table.cend(), m_table.cend());
 	}
-	
+
 	const_iterator cbegin() const
 	{
 		return const_iterator(m_table.cbegin(), m_table.cend());
 	}
-	
+
 	const_iterator cend() const
 	{
 		return const_iterator(m_table.cend(), m_table.cend());
 	}
-	
+
 	const_iterator begin() const
 	{
 		return cbegin();
 	}
-	
+
 	const_iterator end() const
 	{
 		return cend();
