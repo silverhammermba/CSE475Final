@@ -153,7 +153,7 @@ TEST_F(AFastMap, CanBeRebuiltFully)
 
 	m_map.fullRehash();
 
-	EXPECT_EQ(count, m_map.size());
+	EXPECT_EQ((size_t)count, m_map.size());
 	
 	for (const auto& pair : pairs)
 	{

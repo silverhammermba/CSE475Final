@@ -9,7 +9,8 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-
+#include <boost/thread/locks.hpp>
+#include <boost/thread/shared_mutex.hpp>
 #include "random_utils.h"
 
 template<class K, class V>
@@ -165,6 +166,8 @@ public:
 	// try to insert pair into the hash table, rebuilding if necessary
 	bool insert(upair_t pair)
 	{
+		boost::unique_lock<boost::shared_mutex> lock(write_mutex);
+
 		// key already exists, do nothing
 		if (count(pair->first))
 		{
@@ -205,8 +208,10 @@ public:
 	}
 
 	// return the value matching key
-	const V& at(const K& key) const
+	const V& at(const K& key)
 	{
+		boost::shared_lock<boost::shared_mutex> lock(write_mutex);
+
 		if (!count(key)) throw std::out_of_range("FastLookupMap::at");
 		return getBucket(key)->second;
 	}
@@ -398,6 +403,7 @@ public:
 	hash_t m_hash;      // hash function
 	size_t m_capacity;  // how many pairs can be stored without rebuilding
 	size_t m_num_pairs; // how many pairs are currently stored
+	boost::shared_mutex write_mutex;
 };
 
 #endif
