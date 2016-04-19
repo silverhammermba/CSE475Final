@@ -374,6 +374,12 @@ public:
 
 	void fullRehash(upair_t new_upair = upair_t())
 	{
+		// We do not want duplicate keys added to our table, otherwise our calculateHash/isHashPerfect fcns will loop indefinitely
+		if (new_upair != nullptr && count(new_upair->first))
+		{
+			new_upair.reset();
+		}
+
 		upair_list_t upair_list;
 		std::vector<size_t> hash_distribution;
 		hashed_upair_list_t hashed_upair_list;
