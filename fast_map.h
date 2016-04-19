@@ -315,8 +315,7 @@ public:
 		shared_lock<shared_mutex> rb_lock(m_rebuild_mutex);			// unexclusive-access with read-lock
 		shared_lock<shared_mutex> st_lock(getSubtableMutex(key));	// unexclusive-access with read-lock
 
-		auto& usubtable = getSubtable(key);
-		return !usubtable ? 0 : usubtable->count(key);
+		return countNL(key);
 	}
 
 	size_t size()
@@ -351,6 +350,13 @@ public:
 		return num_pairs;
 	}
 
+	// no locking version
+	size_t countNL(const K& key) const
+	{
+		auto& usubtable = getSubtable(key);
+		return !usubtable ? 0 : usubtable->count(key);
+	}
+
 	// convenience functions for getting the unique_ptr for a key
 	subtable_t& getSubtable(const K& key)
 	{
@@ -375,7 +381,7 @@ public:
 	void fullRehash(upair_t new_upair = upair_t())
 	{
 		// We do not want duplicate keys added to our table, otherwise our calculateHash/isHashPerfect fcns will loop indefinitely
-		if (new_upair != nullptr && count(new_upair->first))
+		if (new_upair != nullptr && countNL(new_upair->first))
 		{
 			new_upair.reset();
 		}
