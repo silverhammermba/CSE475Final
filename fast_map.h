@@ -138,6 +138,7 @@ public:
 	FastMap()
 		: m_C(2),
 		m_SM_SCALING(1),
+		m_prime(2),
 		m_num_pairs(0),
 		m_num_operations(0)
 	{
@@ -146,13 +147,14 @@ public:
 		m_capacity = (1 + m_C) * std::max(this->size(), size_t(4));	// Calculate new element count threshold
 		auto bucket_count = s(m_capacity);							// Calculate new number of partitions/buckets in Top Level Table
 		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
-		m_hash = random_hash<K>(bucket_count);
+		m_hash = random_hash<K>(bucket_count, m_prime);
 	}
 
 	template <class Iter>
 	FastMap(Iter first, Iter last)
 		: m_C(2),
 		m_SM_SCALING(1),
+		m_prime(2),
 		m_num_pairs(0),
 		m_num_operations(0)
 	{
@@ -161,7 +163,7 @@ public:
 		m_capacity = (1 + m_C) * std::max(this->size(), size_t(4));	// Calculate new element count threshold
 		auto bucket_count = s(m_capacity);							// Calculate new number of partitions/buckets in Top Level Table
 		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
-		m_hash = random_hash<K>(bucket_count);
+		m_hash = random_hash<K>(bucket_count, m_prime);
 
 		for (; first != last; ++first)
 		{
@@ -389,7 +391,7 @@ public:
 			total_bucket_count = 0;
 			std::fill(hash_distribution.begin(), hash_distribution.end(), 0);
 
-			hash = random_hash<K>(num_buckets);
+			hash = random_hash<K>(num_buckets, m_prime);
 
 			// Calculate hash distribution
 			for (const auto& x : upair_list)
@@ -485,10 +487,11 @@ public:
 	table_t m_table;                // internal hash table
 	hash_t m_hash;                  // hash function
 	// TODO constants?
-	size_t m_C;						// Growth of M
-	size_t m_SM_SCALING;			// Growth of Partitions/Buckets in Top Level Table
+	size_t m_C;                     // Growth of M
+	size_t m_SM_SCALING;            // Growth of Partitions/Buckets in Top Level Table
 	// variables
-	size_t m_capacity;				// (M) Threshold for total number of elements in Table
+	unsigned int m_prime;           // prime number used by hash function
+	size_t m_capacity;              // (M) Threshold for total number of elements in Table
 	size_t m_num_pairs;             // how many pairs are currently stored
 	size_t m_num_operations;
 };

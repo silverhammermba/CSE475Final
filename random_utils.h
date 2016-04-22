@@ -47,13 +47,13 @@ inline unsigned int random_prime_at_least(unsigned int min)
 	}
 }
 
-// return a random hash function onto [0, range)
+// return a random hash function onto [0, range) using prime p. may change p if it is too small
 template <class K>
-std::function<size_t(K)> random_hash(size_t range)
+std::function<size_t(K)> random_hash(size_t range, unsigned int& p)
 {
 	if (range > std::numeric_limits<unsigned int>::max()) throw std::out_of_range("random_hash requested range is too large");
+	if (p < range) p = random_prime_at_least((unsigned int)range);
 
-	unsigned int p = random_prime_at_least((unsigned int)range);
 	unsigned int a = random_uint(1, p - 1);
 	unsigned int b = random_uint(0, p - 1);
 
