@@ -138,7 +138,6 @@ public:
 	FastMap()
 		: m_C(2),
 		m_SM_SCALING(1),
-		m_prime(2),
 		m_num_pairs(0),
 		m_num_operations(0)
 	{
@@ -154,7 +153,6 @@ public:
 	FastMap(Iter first, Iter last)
 		: m_C(2),
 		m_SM_SCALING(1),
-		m_prime(2),
 		m_num_pairs(0),
 		m_num_operations(0)
 	{
@@ -490,7 +488,6 @@ public:
 	size_t m_C;                     // Growth of M
 	size_t m_SM_SCALING;            // Growth of Partitions/Buckets in Top Level Table
 	// variables
-	unsigned int m_prime;           // prime number used by hash function
 	size_t m_capacity;              // (M) Threshold for total number of elements in Table
 	size_t m_num_pairs;             // how many pairs are currently stored
 	size_t m_num_operations;
