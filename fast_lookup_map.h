@@ -117,13 +117,13 @@ public:
 //public:
 
 	FastLookupMap(size_t min_capacity = 2)
-		: m_prime {2}, m_num_pairs {0}
+		: m_num_pairs {0}
 	{
 		m_capacity = std::max(size_t(2), min_capacity);
 		auto new_table_size = calculateTableSize();
 
 		m_table.resize(new_table_size);
-		m_hash = random_hash<K>(new_table_size, m_prime);
+		m_hash = random_hash<K>(new_table_size);
 	}
 
 	// Static build of table
@@ -131,7 +131,7 @@ public:
 	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
 	template <class Iter>
 	FastLookupMap(Iter first, Iter last)
-		: m_prime {2}, m_num_pairs{ 0 }
+		: m_num_pairs{ 0 }
 	{
 		rebuildTable(first, last);
 	}
@@ -295,7 +295,7 @@ public:
 	{
 		hash_t hash;
 		do
-			hash = random_hash<K>(num_buckets, m_prime);
+			hash = random_hash<K>(num_buckets);
 		while (!isHashPerfect(first, last, num_buckets, hash));
 
 		return hash;
@@ -407,7 +407,6 @@ public:
 	}
 
 	table_t m_table;      // internal hash table
-	unsigned int m_prime; // prime number used for random hash function
 	hash_t m_hash;        // hash function
 	size_t m_capacity;    // how many pairs can be stored without rebuilding
 	size_t m_num_pairs;   // how many pairs are currently stored

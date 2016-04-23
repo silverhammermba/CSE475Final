@@ -147,7 +147,7 @@ public:
 		m_capacity = (1 + m_C) * std::max(this->size(), size_t(4));	// Calculate new element count threshold
 		auto bucket_count = s(m_capacity);							// Calculate new number of partitions/buckets in Top Level Table
 		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
-		m_hash = random_hash<K>(bucket_count, m_prime);
+		m_hash = random_hash<K>(bucket_count);
 	}
 
 	template <class Iter>
@@ -163,7 +163,7 @@ public:
 		m_capacity = (1 + m_C) * std::max(this->size(), size_t(4));	// Calculate new element count threshold
 		auto bucket_count = s(m_capacity);							// Calculate new number of partitions/buckets in Top Level Table
 		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
-		m_hash = random_hash<K>(bucket_count, m_prime);
+		m_hash = random_hash<K>(bucket_count);
 
 		for (; first != last; ++first)
 		{
@@ -391,7 +391,7 @@ public:
 			total_bucket_count = 0;
 			std::fill(hash_distribution.begin(), hash_distribution.end(), 0);
 
-			hash = random_hash<K>(num_buckets, m_prime);
+			hash = random_hash<K>(num_buckets);
 
 			// Calculate hash distribution
 			for (const auto& x : upair_list)
