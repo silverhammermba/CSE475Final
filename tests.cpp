@@ -87,6 +87,5 @@ namespace
 
 void test_driver(config_t &cfg)
 {
-	if (cfg.map == "multithreaded_rev1")	run_custom_tests<FastMap<int, int>>(cfg);
-
+	run_custom_tests<FastMap<int, int>>(cfg);
 }
