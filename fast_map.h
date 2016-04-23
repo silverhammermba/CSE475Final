@@ -561,13 +561,14 @@ public:
 
 	table_t m_table;                // internal hash table
 	hash_t m_hash;                  // hash function
-	size_t m_capacity;				// (M) Threshold for total number of elements in Table
+	// TODO constants?
+	size_t m_C;                     // Growth of M
+	size_t m_SM_SCALING;            // Growth of Partitions/Buckets in Top Level Table
+	// variables
+	size_t m_capacity;              // (M) Threshold for total number of elements in Table
 	std::atomic<size_t> m_num_operations;
 	shared_mutex m_rebuild_mutex;
 	std::vector<std::unique_ptr<shared_mutex>> m_subtable_mutex;
-	// Constants
-	size_t m_C;						// Growth of M
-	size_t m_SM_SCALING;			// Growth of Partitions/Buckets in Top Level Table
 };
 
 #endif

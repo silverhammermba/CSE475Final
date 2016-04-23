@@ -1,6 +1,7 @@
 #ifndef RANDOM_UTILS_H
 #define RANDOM_UTILS_H
 
+#include <cstdint>
 #include <random>
 #include <stdexcept>
 
@@ -9,6 +10,15 @@
 #else
 #define NOEXCEPT
 #endif
+
+#if defined (_MSC_VER)
+#define thread_local __declspec( thread )
+#elif defined (__GCC__)
+#define thread_local __thread
+#endif
+
+// N.B. largest uint32_t prime, but could be chosen dynamically if needed
+static const uint32_t HASH_PRIME = 4294967291U;
 
 // return a random size_t >= min and <= max if provided
 inline unsigned int random_uint(unsigned int min, unsigned int max = std::numeric_limits<unsigned int>::max())
@@ -21,43 +31,16 @@ inline unsigned int random_uint(unsigned int min, unsigned int max = std::numeri
 	return dist(generator);
 }
 
-// test if p is prime
-inline bool is_prime(unsigned int p)
-{
-	if (p < 2) return false;
-	if (p == 2) return true;
-	if (p % 2 == 0) return false;
-
-	for (unsigned int i = 3; (i * i) <= p; i += 2)
-	{
-		if (p % i == 0) return false;
-	}
-
-	return true;
-}
-
-// return a random prime >= min
-inline unsigned int random_prime_at_least(unsigned int min)
-{
-	while (true)
-	{
-		unsigned int p = random_uint(min);
-		if (!is_prime(p)) continue;
-		return p;
-	}
-}
-
 // return a random hash function onto [0, range)
 template <class K>
-std::function<size_t(K)> random_hash(size_t range)
+std::function<size_t(K)> random_hash(uint32_t range)
 {
-	if (range > std::numeric_limits<unsigned int>::max()) throw std::out_of_range("random_hash requested range is too large");
+	if (HASH_PRIME < range) throw std::out_of_range("random_hash requested range is larger than HASH_PRIME");
 
-	unsigned int p = random_prime_at_least((unsigned int)range);
-	unsigned int a = random_uint(1, p - 1);
-	unsigned int b = random_uint(0, p - 1);
+	uint32_t a = random_uint(1, HASH_PRIME - 1);
+	uint32_t b = random_uint(0, HASH_PRIME - 1);
 
-	return [range, p, a, b](K key) { return ((a * key + b) % p) % range; };
+	return [range, a, b](K key) { return ((a * key + b) % HASH_PRIME) % range; };
 }
 
 #endif

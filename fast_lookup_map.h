@@ -117,7 +117,7 @@ public:
 //public:
 
 	FastLookupMap(size_t min_capacity = 2)
-		: m_num_pairs{ 0 }
+		: m_num_pairs {0}
 	{
 		m_capacity = std::max(size_t(2), min_capacity);
 		auto new_table_size = calculateTableSize();
@@ -295,10 +295,8 @@ public:
 	{
 		hash_t hash;
 		do
-		{
 			hash = random_hash<K>(num_buckets);
-
-		} while (!isHashPerfect(first, last, num_buckets, hash));
+		while (!isHashPerfect(first, last, num_buckets, hash));
 
 		return hash;
 	}
@@ -334,7 +332,7 @@ public:
 	void rebuildTable(size_t new_bucket_count, upair_t new_upair = upair_t())
 	{
 		upair_list_t upair_list;
-		upair_list.reserve(m_num_pairs + 1);	// allocate extra in case new_upair exists
+		upair_list.reserve(m_num_pairs + 1); // allocate extra in case new_upair exists
 		m_table.resize(new_bucket_count);
 
 		// Move table contents to list - cannot use FLM iterators as they dereference unique_ptrs
@@ -408,10 +406,10 @@ public:
 		return cend();
 	}
 
-	table_t m_table;		// internal hash table
-	hash_t m_hash;			// hash function
-	size_t m_capacity;		// how many pairs can be stored without rebuilding
-	size_t m_num_pairs;		// how many pairs are currently stored
+	table_t m_table;      // internal hash table
+	hash_t m_hash;        // hash function
+	size_t m_capacity;    // how many pairs can be stored without rebuilding
+	size_t m_num_pairs;   // how many pairs are currently stored
 };
 
 #endif

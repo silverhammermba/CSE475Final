@@ -88,5 +88,4 @@ namespace
 void test_driver(config_t &cfg)
 {
 	run_custom_tests<FastMap<int, int>>(cfg);
-
 }
