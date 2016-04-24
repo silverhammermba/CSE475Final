@@ -209,23 +209,9 @@ public:
 		return hash;
 	}
 
-	// rehash each pair in the table (pointless if the hash hasn't changed)
-	void rehashTable(size_t new_bucket_count)
-	{
-		table_t old_table = std::move(m_table);
-		m_table.resize(new_bucket_count);
-
-		// rehash old pairs
-		for (auto& bucket : old_table)
-		{
-			if (!bucket) continue;
-
-			m_table.at(hashKey(m_hash, bucket)) = std::move(bucket);
-		}
-	}
-
 	// reconstruct the table with a new perfect hash function
 	// (e.g. if there is a collision or we're over capacity)
+	// TODO seems redundant
 	void rebuildTable()
 	{
 		// if we're over capacity, double it
@@ -241,7 +227,13 @@ public:
 		}
 		m_hash = calculateHash(upair_list.begin(), upair_list.end(), new_table_size);
 
-		rehashTable(new_table_size);
+		m_table.resize(new_table_size);
+
+		// rehash old pairs
+		for (auto& upair : upair_list)
+		{
+			m_table.at(hashKey(m_hash, upair)) = std::move(upair);
+		}
 	}
 
 	void rebuildTable(size_t new_bucket_count, upair_t new_upair = upair_t())
