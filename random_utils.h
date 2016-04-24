@@ -17,8 +17,9 @@
 #define thread_local __thread
 #endif
 
-// N.B. largest uint32_t prime, but could be chosen dynamically if needed
-static const uint32_t HASH_PRIME = 4294967291U;
+// TODO this hard-coded prime causes infinite loops if too large, why?
+// something to do with modular arithmetic and (key % range) == 1 ?
+static const uint32_t HASH_PRIME = 2695268753U;
 
 // return a random size_t >= min and <= max if provided
 inline unsigned int random_uint(unsigned int min, unsigned int max = std::numeric_limits<unsigned int>::max())
