@@ -1,4 +1,4 @@
-#include <iostream>
+#include <ostream>
 #include <string>
 
 // stores our command-line config parameters
@@ -10,17 +10,18 @@ struct config_t
 	int iters;        // how many operations each thread performs
 
 	// simple constructor
-	config_t()
-		: key_max(2560), iters(10000), name("no_name"), threads(1)
+	config_t(const std::string& _name, int _key_max, int _threads, int _iters)
+		: name {_name}, key_max {_key_max}, threads {_threads}, iters {_iters}
 	{}
 
-	// Print the values of the seed, iters, and name fields
-	void dump()
+	// print the config's values
+	friend std::ostream& operator<< (std::ostream& output, const config_t& cfg)
 	{
-		std::cout << "# name, key_max, iters, threads, time" << std::endl
-		          << name << ", "
-		          << key_max << ", "
-		          << iters << ", "
-		          << threads << ", ";
+		output << "# name, key_max, iters, threads, time" << std::endl
+		       << cfg.name << ", "
+		       << cfg.key_max << ", "
+		       << cfg.iters << ", "
+		       << cfg.threads << ", ";
+		return output;
 	}
 };
