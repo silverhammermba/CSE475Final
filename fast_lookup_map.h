@@ -22,98 +22,6 @@ public:
 	typedef std::vector<upair_t> upair_list_t;
 	typedef std::vector<upair_t> table_t;
 
-	template <class T>
-	class ForwardIterator
-		: public std::iterator<std::forward_iterator_tag, pair_t>
-	{
-		// needs to call explicit constructor
-		friend FastLookupMap;
-
-		// the const here only protects the unique_ptrs, so it works even for the non-const iterator
-		typedef typename table_t::const_iterator itr_t;
-
-		itr_t it, end;
-
-		// construct from hash table iterator
-		explicit ForwardIterator(const itr_t& _it, const itr_t& _end)
-			: it{ _it }, end{ _end }
-		{
-			while (it != end && !*it) ++it;
-		}
-
-	public:
-		ForwardIterator()
-		{
-		}
-
-		ForwardIterator(const ForwardIterator& other)
-			: it{ other.it }, end{ other.end }
-		{
-		}
-
-		ForwardIterator& operator=(const ForwardIterator& other)
-		{
-			it = other.it;
-			end = other.end;
-			return *this;
-		}
-
-		void swap(ForwardIterator& other) NOEXCEPT
-		{
-			std::swap(it, other.it);
-			std::swap(end, other.end);
-		}
-
-		// ++it
-		const ForwardIterator& operator++()
-		{
-			do
-			{
-				++it;
-			} while (it != end && !*it);
-
-			return *this;
-		}
-
-		// it++
-		ForwardIterator operator++(int)
-		{
-			ForwardIterator prev{ it, end };
-
-			do
-			{
-				++it;
-			} while (it != end && !*it);
-
-			return prev;
-		}
-
-		template<class OtherType>
-		bool operator==(const ForwardIterator<OtherType>& other) const
-		{
-			return it == other.it && end == other.end;
-		}
-
-		template<class OtherType>
-		bool operator!=(const ForwardIterator<OtherType>& other) const
-		{
-			return it != other.it || end != other.end;
-		}
-
-		T& operator*() const
-		{
-			return **it;
-		}
-
-		T* operator->() const
-		{
-			return &(**it);
-		}
-	};
-
-	typedef ForwardIterator<pair_t> iterator;
-	typedef ForwardIterator<const pair_t> const_iterator;
-
 //public:
 
 	FastLookupMap(size_t min_capacity = 2)
@@ -324,7 +232,14 @@ public:
 		while (m_num_pairs > m_capacity) m_capacity *= 2;
 		auto new_table_size = calculateTableSize();
 
-		m_hash = calculateHash(this->begin(), this->end(), new_table_size);
+		// TODO temporary solution until we can refactor the rebuild
+		upair_list_t upair_list;
+		upair_list.reserve(m_num_pairs);
+		for (auto& upair : m_table)
+		{
+			if (upair != nullptr) upair_list.emplace_back(std::move(upair));
+		}
+		m_hash = calculateHash(upair_list.begin(), upair_list.end(), new_table_size);
 
 		rehashTable(new_table_size);
 	}
@@ -374,36 +289,6 @@ public:
 
 		m_hash = calculateHash(first, last, bucket_count);
 		insert(first, last);
-	}
-
-	iterator begin()
-	{
-		return iterator(m_table.cbegin(), m_table.cend());
-	}
-
-	iterator end()
-	{
-		return iterator(m_table.cend(), m_table.cend());
-	}
-
-	const_iterator cbegin() const
-	{
-		return const_iterator(m_table.cbegin(), m_table.cend());
-	}
-
-	const_iterator cend() const
-	{
-		return const_iterator(m_table.cend(), m_table.cend());
-	}
-
-	const_iterator begin() const
-	{
-		return cbegin();
-	}
-
-	const_iterator end() const
-	{
-		return cend();
 	}
 
 	table_t m_table;      // internal hash table

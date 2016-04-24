@@ -21,8 +21,6 @@ public:
 TEST_F(AFastLookupMap, IsEmptyWhenCreated)
 {
 	EXPECT_EQ(0u, m_map.size());
-	ASSERT_EQ(m_map.begin(), m_map.end());
-	ASSERT_EQ(m_map.cbegin(), m_map.cend());
 }
 
 TEST_F(AFastLookupMap, CannotAccessMissingPair)
@@ -48,54 +46,6 @@ TEST_F(AFastLookupMap, CanErasePair)
 	EXPECT_EQ(1u, m_map.erase(m_pair.first));
 	EXPECT_EQ(0u, m_map.count(m_pair.first));
 	EXPECT_EQ(0u, m_map.size());
-}
-
-TEST_F(AFastLookupMap, IsIterable)
-{
-	m_map.insert(m_pair);
-
-	// first value should be what we just inserted
-	auto it = m_map.begin();
-	ASSERT_EQ(*it, m_pair);
-
-	// we should be able to change it
-	++(it->second);
-	ASSERT_EQ(m_pair.second + 1, m_map.at(m_pair.first));
-
-	// next value should be the end
-	ASSERT_EQ(++it, m_map.end());
-}
-
-TEST_F(AFastLookupMap, IsConstIterable)
-{
-	m_map.insert(m_pair);
-
-	// first value should be what we just inserted
-	auto it = m_map.cbegin();
-	ASSERT_EQ(*it, m_pair);
-
-	// next value should be the end
-	ASSERT_EQ(++it, m_map.cend());
-}
-
-TEST_F(AFastLookupMap, CanUseRangeBasedFor)
-{
-	m_map.insert(m_pair);
-
-	for (auto& p : m_map)
-	{
-		ASSERT_EQ(p, m_pair);
-
-		++p.second;
-	}
-
-	ASSERT_EQ(m_pair.second + 1, m_map.at(m_pair.first));
-
-	for (const auto& p : m_map)
-	{
-		ASSERT_EQ(p.first, m_pair.first);
-		ASSERT_EQ(p.second, m_pair.second + 1);
-	}
 }
 
 TEST_F(AFastLookupMap, CanInsertManyPairs)
