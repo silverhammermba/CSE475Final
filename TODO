@@ -1,4 +1,7 @@
-contact spear
+contact spear, ask about:
+	how important a proper template is (e.g. general hash function)
+	how important general optimizations are
+	whether boost's readers/writers locks are okay
 fine-tune lock placement (hashmap_locking branch, insert fcn)
 figure out effect of constants
 
