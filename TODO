@@ -5,13 +5,15 @@ contact spear, ask about:
 fine-tune lock placement (hashmap_locking branch, insert fcn)
 figure out effect of constants
 
-replace unique_ptrs with normal pointers
 remove useless iterators
 add arg parsing for tests
 fix all uint32_t conversions
 make cfg iters total, not per-thread
-use integer comparison for DPH thresh
 make test run multiple attempts and report and average (maybe with variations?)
 think about thread-safety/efficiency of RNG
 maybe track size of fast lookup map rather than actually shrink it during rebuild
 maybe keep collision map around
+
+## FIXED ##
+replace unique_ptrs with normal pointers
+use integer comparison for DPH thresh
