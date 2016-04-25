@@ -1,4 +1,4 @@
-CXXFLAGS=-std=c++14 -Wall -Wextra -Wfatal-errors -ggdb -Igoogletest/googletest/include
+CXXFLAGS=-std=c++14 -Wall -Wextra -Wfatal-errors -Wconversion -ggdb -Igoogletest/googletest/include
 LDFLAGS=-Lgoogletest/googlemock/gtest
 LDLIBS=-lpthread -lgtest
 SRC=$(wildcard *.cpp)
@@ -16,7 +16,6 @@ clean:
 	$(RM) $(OBJ) $(BIN)
 
 # automatic dependency generation
-#depend: .depend
 
 .depend: $(SRC) $(wildcard *.h)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend
