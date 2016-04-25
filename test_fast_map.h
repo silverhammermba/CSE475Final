@@ -92,7 +92,7 @@ TEST_F(AFastMap, CanEraseManyPairs)
 	}
 }
 
-TEST_F(AFastMap, CanBeRebuiltFully)
+TEST_F(AFastMap, CanBeRebuilt)
 {
 	int count = 1000;
 
@@ -102,7 +102,7 @@ TEST_F(AFastMap, CanBeRebuiltFully)
 
 	for (const auto& pair : pairs) m_map.insert(pair);
 
-	m_map.fullRehash();
+	m_map.rebuild();
 
 	EXPECT_EQ(count, m_map.size());
 	
