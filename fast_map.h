@@ -143,7 +143,7 @@ public:
 	{
 		// Could call fullRehash here instead to reuse code
 		// Performed here now, otherwise a fullRehash would occur and do same operation after first insert
-		m_capacity = (1 + m_C) * std::max(this->size(), size_t(4));	// Calculate new element count threshold
+		m_capacity = (1 + m_C) * std::max<size_t>(4, size());	// Calculate new element count threshold
 		auto bucket_count = s(m_capacity);							// Calculate new number of partitions/buckets in Top Level Table
 		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
 		m_hash = random_hash<K>(bucket_count);
@@ -158,7 +158,7 @@ public:
 	{
 		// Could call fullRehash here instead to reuse code
 		// Performed here now, otherwise a fullRehash would occur and do same operation after first insert
-		m_capacity = (1 + m_C) * std::max(this->size(), size_t(4));	// Calculate new element count threshold
+		m_capacity = (1 + m_C) * std::max<size_t>(4, size());	// Calculate new element count threshold
 		auto bucket_count = s(m_capacity);							// Calculate new number of partitions/buckets in Top Level Table
 		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
 		m_hash = random_hash<K>(bucket_count);
@@ -330,7 +330,7 @@ public:
 			++num_pairs;
 		}
 
-		m_capacity = (1 + m_C) * std::max(num_pairs, size_t(4));	// (M) Calculate new element number threshold
+		m_capacity = (1 + m_C) * std::max<size_t>(4, num_pairs);	// (M) Calculate new element number threshold
 		auto bucket_count = s(m_capacity);							// (s(M)) Calculate new number of partitions/buckets in Top Level Table
 		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
 

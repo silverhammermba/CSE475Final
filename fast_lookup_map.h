@@ -119,7 +119,7 @@ public:
 	FastLookupMap(size_t min_capacity = 2)
 		: m_num_pairs {0}
 	{
-		m_capacity = std::max(size_t(2), min_capacity);
+		m_capacity = std::max<size_t>(2, min_capacity);
 		auto new_table_size = calculateTableSize();
 
 		m_table.resize(new_table_size);

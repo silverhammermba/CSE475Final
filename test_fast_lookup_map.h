@@ -110,7 +110,7 @@ TEST_F(AFastLookupMap, CanInsertManyPairs)
 
 	// table rebuilds during inserts, so only test elements after all inserts complete
 
-	EXPECT_EQ(size_t(count), m_map.size());
+	EXPECT_EQ(pairs.size(), m_map.size());
 
 	for (const auto& pair : pairs)
 	{
@@ -128,8 +128,8 @@ TEST_F(AFastLookupMap, CanBeStaticallyConstructed)
 		pairs.push_back(std::make_pair(i, -i));
 
 	FastLookupMap<int, int> map(pairs.begin(), pairs.end());
-	
-	EXPECT_EQ(size_t(pairs.size()), map.size());
+
+	EXPECT_EQ(pairs.size(), map.size());
 
 	for (const auto& pair : pairs)
 	{
