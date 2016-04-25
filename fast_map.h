@@ -16,8 +16,7 @@ public:
 	typedef std::pair<const K, V> pair_t;
 	typedef FastLookupMap<K, V> subtable_t;
 	typedef std::vector<subtable_t*> table_t;
-	typedef std::vector<pair_t*> bucket_list_t; // TODO this should be something like st_table_t
-	typedef std::vector<std::vector<pair_t*>> hashed_bucket_list_t;
+	typedef std::vector<pair_t*> st_table_t; // the internal table type for the subtables (used during rebuilds)
 
 	template <class T>
 	class ForwardIterator
@@ -135,7 +134,7 @@ public:
 
 	// constants determining growth rates. TODO what happens when we vary these?
 	static const size_t THRESHOLD_SCALE = 2; // c, controls how the threshold scales based on number known pairs
-	static const size_t    BUCKET_SCALE = 3; // controls how number of buckets scales with the threshold
+	static const size_t ST_BUCKET_SCALE = 3; // controls how number of buckets (for subtables) scales with the threshold
 	/* XXX in the paper they choose this to be 8 * sqrt(30) / 15 = 2.921,
 	 * in order to prove the linear space requirement of the map
 	 */
@@ -147,11 +146,11 @@ public:
 		return (1 + THRESHOLD_SCALE) * std::max(num_pairs, (size_t)4);
 	}
 
-	// how many buckets should we have for the current threshold?
+	// how many subtable buckets should we have for the current threshold?
 	// s(M)
-	static size_t bucketCountFromThreshold(size_t threshold)
+	static size_t stBucketCountFromThreshold(size_t threshold)
 	{
-		return BUCKET_SCALE * threshold;
+		return ST_BUCKET_SCALE * threshold;
 	}
 
 	// construct with a hint that we need to store at least num_pairs pairs
@@ -197,14 +196,14 @@ public:
 		 * then delete many pairs, we might always see the table as unbalanced
 		 * afterwards, until we add enough pairs to bump the threshold back up
 		 */
-		size_t total_bucket_count = st_bucket->bucketCountAfterInsert();
+		size_t num_buckets = st_bucket->bucketCountAfterInsert();
 		for (auto& stb : m_table)
 		{
-			if (stb && stb != st_bucket) total_bucket_count += stb->bucketCount();
+			if (stb && stb != st_bucket) num_buckets += stb->bucketCount();
 		}
 
 		// if the insert would be balanced, do that
-		if (isBucketCountBalanced(total_bucket_count)) return st_bucket->insert(pair);
+		if (isBucketCountBalanced(num_buckets)) return st_bucket->insert(pair);
 
 		// else insert would unbalance table, rebuild
 		return insertAndRebuild(pair);
@@ -236,8 +235,8 @@ public:
 	// return 1 if pair matching key is in table, else return 0
 	size_t count(const K& key) const
 	{
-		auto& bucket = getSubtable(key);
-		return bucket && bucket->count(key);
+		auto& st_bucket = getSubtable(key);
+		return st_bucket && st_bucket->count(key);
 	}
 
 	// rebuild the entire table
@@ -266,45 +265,45 @@ private:
 	}
 
 	// insert a new pair (if non-null) and rebuild the entire table
-	bool insertAndRebuild(pair_t* new_bucket_pair)
+	bool insertAndRebuild(pair_t* new_bucket)
 	{
 		// if the table is empty (and we aren't inserting) rebuilding is easy
-		if (!new_bucket_pair && m_num_pairs == 0)
+		if (!new_bucket && m_num_pairs == 0)
 		{
-			m_table.resize(bucketCountFromThreshold(m_threshold));
+			m_table.resize(stBucketCountFromThreshold(m_threshold));
 			m_hash = random_hash<K>(m_table.size());
 			m_num_operations = 0;
 			return false;
 		}
 
 		// assume that non-null pair will be inserted
-		bool inserted = new_bucket_pair != nullptr;
+		bool inserted = new_bucket != nullptr;
 
 		// ensure duplicate keys are not added
-		if (new_bucket_pair && count(new_bucket_pair->first))
+		if (new_bucket && count(new_bucket->first))
 		{
-			delete new_bucket_pair;
-			new_bucket_pair = nullptr;
+			delete new_bucket;
+			new_bucket = nullptr;
 			inserted = false;
 		}
 
 		// move all pairs from subtales into a list
 		size_t num_pairs = m_num_pairs;
-		bucket_list_t bucket_pair_list = moveTableToList(m_table, num_pairs + 1);
+		st_table_t buckets = moveTableToList(m_table, num_pairs + 1);
 
 		// add new pair, if specified
-		if (new_bucket_pair)
+		if (new_bucket)
 		{
-			bucket_pair_list.push_back(new_bucket_pair);
+			buckets.push_back(new_bucket);
 			++num_pairs;
 		}
 
 		// TODO worry about threshold (thus m_table) shrinking and leaking memory
 		m_threshold = thresholdFromNumPairs(num_pairs);
-		m_table.resize(bucketCountFromThreshold(m_threshold));
+		m_table.resize(stBucketCountFromThreshold(m_threshold));
 
 		// get balanced hash and hash distribution
-		auto hd_pair = findBalancedHash(bucket_pair_list, m_table.size());
+		auto hd_pair = findBalancedHash(buckets, m_table.size());
 		m_hash = hd_pair.first;
 		auto& hash_distribution = hd_pair.second;
 
@@ -320,7 +319,7 @@ private:
 		}
 
 		// move pairs from list back into subtables
-		for (auto& b : bucket_pair_list) getSubtable(b->first)->insert(b);
+		for (auto& b : buckets) getSubtable(b->first)->insert(b);
 
 		m_num_operations = 0;
 		return inserted;
@@ -328,58 +327,54 @@ private:
 
 	// move all the nonempty buckets out of the subtables and into one list
 	// this places the map in an inconsistent state
-	bucket_list_t moveTableToList(table_t& table, size_t size_hint = 0)
+	st_table_t moveTableToList(table_t& table, size_t size_hint = 0)
 	{
-		bucket_list_t bucket_list;
-		bucket_list.reserve(size_hint);
+		st_table_t buckets;
+		buckets.reserve(size_hint);
 
-		for (auto& bucket_subtable : table)
+		for (auto& st_bucket : table)
 		{
-			if (!bucket_subtable) continue;
+			if (!st_bucket) continue;
 
-			for (auto& bucket_pair : bucket_subtable->m_table)
+			for (auto& bucket : st_bucket->m_table)
 			{
-				if (bucket_pair)
-				{
-					bucket_list.push_back(bucket_pair);
-					bucket_pair = nullptr;
-				}
+				if (!bucket) continue;
+				buckets.push_back(bucket);
+				bucket = nullptr;
 			}
 
-			bucket_subtable->clear();
+			st_bucket->clear();
 		}
 
-		return bucket_list;
+		return buckets;
 	}
 
-	// calculate a balanced hash onto num_buckets for the pairs in bucket_list.
+	// calculate a balanced hash onto num_st_buckets for the pairs in buckets.
 	// return the hash and the distribution of pairs in the subtables
-	std::pair<hash_t, std::vector<size_t>> findBalancedHash(const bucket_list_t& bucket_list, size_t num_buckets) const
+	std::pair<hash_t, std::vector<size_t>> findBalancedHash(const st_table_t& buckets, size_t num_st_buckets) const
 	{
 		hash_t hash;
-		size_t total_bucket_count;
-		std::vector<size_t> hash_distribution;
-		hash_distribution.resize(num_buckets);
+		size_t num_buckets;
+		std::vector<size_t> hash_distribution(num_st_buckets);
 
 		do
 		{
-			hash = random_hash<K>(num_buckets);
+			hash = random_hash<K>(num_st_buckets);
 
 			// Calculate hash distribution
 			std::fill(hash_distribution.begin(), hash_distribution.end(), 0);
-			for (const auto& b : bucket_list) ++hash_distribution.at(hash(b->first));
+			for (const auto& b : buckets) ++hash_distribution.at(hash(b->first));
 
 			// Determine number of buckets in resulting subtables
-			total_bucket_count = 0;
-			for (auto size : hash_distribution) total_bucket_count += subtable_t::numBucketsFromNumPairs(size);
-
+			num_buckets = 0;
+			for (auto size : hash_distribution) num_buckets += subtable_t::numBucketsFromNumPairs(size);
 		}
-		while (!isBucketCountBalanced(total_bucket_count));
+		while (!isBucketCountBalanced(num_buckets));
 
 		return std::make_pair(hash, hash_distribution);
 	}
 
-	// would the given total number of pair buckets be balanced for the current threshold?
+	// would the given total number of buckets be balanced for the current threshold?
 	bool isBucketCountBalanced(size_t bucket_count) const
 	{
 		if (bucket_count <= 4 * m_threshold) return true;
