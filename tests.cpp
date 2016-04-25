@@ -1,20 +1,14 @@
-// CSE 375/475 Assignment #3
-// Spring 2016
-
-// Description: This file implements a function that should be able to use
-// the configuration information to drive tests that evaluate the correctness
-// and performance of your list(s) and allocator(s)
-
 #include <atomic>
-#include <thread>
-#include <vector>
 #include <chrono>
 #include <iostream>
+#include <thread>
+#include <vector>
+
 #include "config_t.h"
 #include "tests.h"
 #include "fast_map.h"
 
-namespace 
+namespace
 {
 	int getRand(unsigned int *seed)
 	{
@@ -31,7 +25,10 @@ namespace
 	#endif
 
 	template<class T>
-	void run_custom_tests(config_t& cfg) {
+	void run_custom_tests(config_t& cfg)
+	{
+		std::cout << cfg;
+
 		std::atomic<int> barrier_1, barrier_2, barrier_3;
 
 		std::chrono::high_resolution_clock::time_point start_time, end_time;
