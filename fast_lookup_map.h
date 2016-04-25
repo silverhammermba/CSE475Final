@@ -15,67 +15,59 @@
 template<class K, class V>
 class FastLookupMap
 {
-public:
 	typedef std::function<size_t(K)> hash_t;
 	typedef std::pair<const K, V> pair_t;
 	typedef std::vector<pair_t*> table_t;
 
-//public:
+public:
+	// static functions for determining hash table sizes
 
-	FastLookupMap(size_t min_capacity = 2)
-		: m_num_pairs {0}
+	// how big would a hash table be with the given capacity?
+	static size_t numBucketsFromCapacity(size_t capacity)
 	{
-		m_capacity = std::max(size_t(2), min_capacity);
-		auto new_table_size = calculateTableSize();
-
-		m_table.resize(new_table_size);
-		m_hash = random_hash<K>(new_table_size);
+		return 2 * capacity * (capacity - 1);
 	}
 
-	// Static build of table
-	// It is up to the CREATOR of this object to satisfy balancing of sj <= dph_thresh
-	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
-	FastLookupMap(const table_t& buckets)
-		: m_num_pairs{ 0 }
+	// how much capacity should we have if we know we need to store num_pairs?
+	static size_t capacityFromNumPairs(size_t num_pairs)
 	{
-		rebuildTable(buckets);
+		return 2 * std::max<size_t>(1, num_pairs);
 	}
 
-	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
-	void insert(const table_t& buckets)
+	// how big would a hash table be if initialized with the given number of pairs?
+	static size_t numBucketsFromNumPairs(size_t num_pairs)
 	{
-		for (pair_t* bucket : buckets)
-		{
-			insert(bucket);
-		}
+		return numBucketsFromCapacity(capacityFromNumPairs(num_pairs));
 	}
 
+	// construct with a hint that we need to store at least num_pairs pairs
+	FastLookupMap(size_t num_pairs = 0)
+		: m_num_pairs {0},
+		m_capacity {capacityFromNumPairs(num_pairs)}
+	{
+		rebuild();
+	}
+
+	// try to insert a pair
 	bool insert(const pair_t& pair)
 	{
 		return insert(new pair_t(pair));
 	}
 
-	// try to insert pair into the hash table, rebuilding if necessary
+	// try to insert pair (if non-null), rebuilding if necessary
 	bool insert(pair_t* bucket)
 	{
-		if (!bucket) return false;
-
-		// key already exists, do nothing
-		if (count(bucket->first))
-		{
-			//throw std::exception();	// FastMap's insert logic shouldn't allow us to get here
-			return false;
-		}
+		// check for null/duplicate
+		if (!bucket || count(bucket->first)) return false;
 
 		++m_num_pairs;
 
 		// if we're over capacity or there is a collision
 		if (m_num_pairs > m_capacity || getBucket(bucket->first))
 		{
-			//throw std::exception();	// FastMap's insert logic shouldn't allow us to get here
 			// force the new pair into the table and then rebuild
-			m_table.emplace_back(bucket);
-			rebuildTable();
+			m_table.push_back(bucket);
+			rebuild();
 			return true;
 		}
 
@@ -88,14 +80,12 @@ public:
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
-		if (!count(key))
-		{
-			//throw std::exception();	// FastMap's insert logic shouldn't allow us to get here
-			return 0;
-		}
+		if (!count(key)) return 0;
+
 		--m_num_pairs;
 		delete getBucket(key);
 		getBucket(key) = nullptr;
+
 		return 1;
 	}
 
@@ -113,30 +103,28 @@ public:
 		return bucket && bucket->first == key;
 	}
 
-	bool isCollision(const K& key) const
-	{
-		auto bucket = getBucket(key);
-		return bucket && bucket->first != key;
-	}
-
+	// check if we can (possibly) insert without rebuilding
 	bool isUnderCapacity() const
 	{
 		return m_num_pairs < m_capacity;
 	}
 
+	// return number of pairs
 	size_t size() const
 	{
-		return m_num_pairs;		// bj
+		return m_num_pairs; // bj
 	}
 
+	// return maximum number of pairs that can be stored without rebuilding
 	size_t capacity() const
 	{
-		return m_capacity;		// mj
+		return m_capacity; // mj
 	}
 
+	// return size of actual hash table
 	size_t bucketCount() const
 	{
-		return m_table.size();	// sj, also number of partitions/bucket count
+		return m_table.size(); // sj, also number of partitions/bucket count
 	}
 
 	// how many buckets would there be if we insert another pair?
@@ -145,15 +133,14 @@ public:
 		auto num_pairs = m_num_pairs + 1;
 		auto capacity = m_capacity;
 		while (capacity < num_pairs) capacity *= 2;
-		return calculateTableSize(capacity);
+		return numBucketsFromCapacity(capacity);
 	}
 
+	// return hash function
 	hash_t getHash() const
 	{
 		return m_hash;
 	}
-
-// private
 
 	// convenience functions for getting the unique_ptr for a key
 	inline pair_t*& getBucket(const K& key)
@@ -166,12 +153,7 @@ public:
 		return m_table.at(hashKey(m_hash, key));
 	}
 
-	// calculate the necessary table size for the current capacity
-	inline size_t calculateTableSize(size_t capacity = m_capacity) const
-	{
-		return 2 * capacity * (capacity - 1);
-	}
-
+	// convience functions for calculating the hashed value of a key
 	size_t hashKey(hash_t hash, const K& key) const
 	{
 		return hash(key);
@@ -182,13 +164,13 @@ public:
 		return hashKey(hash, pair.first);
 	}
 
-	size_t hashKey(hash_t hash, const pair_t*& pair) const
+	size_t hashKey(hash_t hash, pair_t* const& pair) const
 	{
 		return hashKey(hash, pair->first);
 	}
 
-	// check if the current hash function has no collisions
-	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
+	// check if a hash function has no collisions for the given buckets
+	// (where hash function has range num_buckets)
 	bool isHashPerfect(const table_t& buckets, size_t num_buckets, const hash_t& hash) const
 	{
 		std::vector<bool> collision_map(num_buckets, false);
@@ -205,8 +187,9 @@ public:
 		return true;
 	}
 
-	// Arguments: iterators to a vector of pair<K,V> or [unique]pointers to pair<K,V>
-	hash_t calculateHash(const table_t& buckets, size_t num_buckets)
+	// find a collision-free hash function for the given buckets
+	// (where hash function has range num_buckets)
+	hash_t findCollisionFreeHash(const table_t& buckets, size_t num_buckets)
 	{
 		hash_t hash;
 		do
@@ -216,16 +199,23 @@ public:
 		return hash;
 	}
 
-	// reconstruct the table with a new perfect hash function
-	// (e.g. if there is a collision or we're over capacity)
-	// TODO seems redundant
-	void rebuildTable()
+	// rebuild the table, getting it back into a consistent state
+	// e.g. too many pairs for capacity, collision exists, capacity was changed
+	void rebuild()
 	{
+		// rebuilding is really easy if it's empty
+		if (m_num_pairs == 0)
+		{
+			m_table.resize(numBucketsFromCapacity(m_capacity));
+			m_hash = random_hash<K>(m_table.size());
+			return;
+		}
+
 		// if we're over capacity, double it
 		while (m_num_pairs > m_capacity) m_capacity *= 2;
-		auto new_table_size = calculateTableSize();
+		auto new_table_size = numBucketsFromCapacity(m_capacity);
 
-		// TODO temporary solution until we can refactor the rebuild
+		// move all pairs into a temporary vector
 		table_t buckets;
 		buckets.reserve(m_num_pairs);
 		for (auto& bucket : m_table)
@@ -236,74 +226,41 @@ public:
 				bucket = nullptr;
 			}
 		}
+
+		// find a new hash function
+		m_hash = findCollisionFreeHash(buckets, new_table_size);
+
+		// move pairs back into the hash table
 		m_table.resize(new_table_size);
-		m_hash = calculateHash(buckets, new_table_size);
-
-		// rehash old pairs
-		for (auto& bucket : buckets)
-		{
-			getBucket(bucket->first) = bucket;
-		}
+		for (auto& bucket : buckets) getBucket(bucket->first) = bucket;
 	}
 
-	// resize the table to a new size, keeping the same pairs and possibly adding one
-	void rebuildTable(size_t new_bucket_count, pair_t* new_bucket = nullptr)
+	// remove all pairs (without actually shrinking table)
+	void clear()
 	{
-		// TODO assumes that new_bucket_count is sensible
-		table_t buckets;
-		buckets.reserve(m_num_pairs + 1); // allocate extra in case new_bucket exists
-
-		// TODO why not just copy m_table?
-		// Move table contents to list - cannot use FLM iterators as they dereference unique_ptrs
-		for (auto& bucket : m_table)
-		{
-			if (bucket)
-			{
-				buckets.push_back(bucket);
-				bucket = nullptr;
-			}
-		}
-		if (new_bucket)
-		{
-			buckets.push_back(new_bucket);
-			++m_num_pairs;
-		}
-
-		m_table.resize(new_bucket_count);
-		m_hash = calculateHash(buckets, new_bucket_count);
-
-		// Rehash all elements and place into table
-		for (auto& bucket : buckets)
-		{
-			getBucket(bucket->first) = bucket;
-		}
-	}
-
-	// replace the contents with those in the given buckets
-	void rebuildTable(const table_t& buckets)
-	{
+		m_num_pairs = 0;
 		for (auto& bucket : m_table)
 		{
 			delete bucket;
+			bucket = nullptr;
 		}
+	}
 
-		m_num_pairs = 0; // don't set equal to distance in case there are duplicates
-
-		// New calculations assume no duplicates, which should be valid if called by FastMap
-		auto num_pairs = buckets.size();                       // bj O(n)
-		m_capacity = 2 * std::max<size_t>(1, num_pairs);       // mj
-		auto bucket_count = calculateTableSize(); // sj
-
-		m_table.resize(bucket_count);
-
-		m_hash = calculateHash(buckets, bucket_count);
-		insert(buckets);
+	// resize the table assuming that we need to store num_pairs (only grows, doesn't shrink)
+	void resize(size_t num_pairs)
+	{
+		size_t cap = capacityFromNumPairs(num_pairs);
+		if (cap > m_capacity)
+		{
+			m_capacity = cap;
+			rebuild();
+		}
 	}
 
 	table_t m_table;      // internal hash table
 	hash_t m_hash;        // hash function
-	size_t m_capacity;    // how many pairs can be stored without rebuilding
 	size_t m_num_pairs;   // how many pairs are currently stored
+	size_t m_capacity;    // how many pairs can be stored without rebuilding
 };
 
 #endif
