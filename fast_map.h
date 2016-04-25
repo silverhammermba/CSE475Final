@@ -48,6 +48,11 @@ public:
 		rebuild();
 	}
 
+	~FastMap()
+	{
+		for (auto& st_bucket : m_table) delete st_bucket;
+	}
+
 	size_t size() const
 	{
 		return m_num_pairs;

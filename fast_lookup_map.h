@@ -48,6 +48,11 @@ public:
 		rebuild();
 	}
 
+	~FastLookupMap()
+	{
+		for (auto& bucket : m_table) delete bucket;
+	}
+
 	// try to insert a pair
 	bool insert(const pair_t& pair)
 	{
