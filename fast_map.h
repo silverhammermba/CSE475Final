@@ -298,7 +298,11 @@ private:
 			++num_pairs;
 		}
 
-		// TODO worry about threshold (thus m_table) shrinking and leaking memory
+		/* TODO
+		 * worry about threshold (thus m_table) shrinking and leaking memory.
+		 * do we even want threshold to be able to shrink e.g. if we are given
+		 * a hint for a large threshold in the constructor?
+		 */
 		m_threshold = thresholdFromNumPairs(num_pairs);
 		m_table.resize(stBucketCountFromThreshold(m_threshold));
 
