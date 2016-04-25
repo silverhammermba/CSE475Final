@@ -14,11 +14,10 @@ class FastMap
 public:
 	typedef std::function<size_t(K)> hash_t;
 	typedef std::pair<const K, V> pair_t;
-	typedef std::unique_ptr<pair_t> upair_t;
-	typedef std::vector<upair_t> upair_list_t;
-	typedef std::vector<upair_list_t> hashed_upair_list_t;
-	typedef std::unique_ptr<FastLookupMap<K, V>> subtable_t;
-	typedef std::vector<subtable_t> table_t;
+	typedef FastLookupMap<K, V> subtable_t;
+	typedef std::vector<subtable_t*> table_t;
+	typedef std::vector<pair_t*> bucket_list_t;
+	typedef std::vector<std::vector<pair_t*>> hashed_bucket_list_t;
 
 	template <class T>
 	class ForwardIterator
@@ -177,76 +176,36 @@ public:
 	// try to insert pair into the hash table
 	bool insert(const pair_t& pair)
 	{
+		// check for duplicate key
+		if (!count(pair.first)) return false;
+
 		++m_num_operations;
-		if (m_num_operations > m_capacity)
-		{
-			fullRehash(pair);
-		}
-		else
-		{
-			auto bucket = hashKey(m_hash, pair);
-			auto& usubtable = getSubtable(pair.first);
-
-			// If subtable doesn't exist create it, insert the element, and return
-			if (usubtable == nullptr)
-			{
-				usubtable = std::make_unique<FastLookupMap<K, V>>();
-				usubtable->insert(pair);
-				++m_num_pairs;
-				return true;
-			}
-
-			// If the key exists in the subtable return
-			if (usubtable->count(pair.first))
-			{
-				return false;
-			}
-
-			if (usubtable->size() + 1 <= usubtable->capacity())
-			{
-				if (!usubtable->isCollision(pair.first))
-				{
-					usubtable->insert(pair);
-				}
-				else
-				{
-					usubtable->rebuildTable(usubtable->bucketCount(), std::make_unique<pair_t>(pair));
-				}
-			}
-			else
-			{
-				auto capacity = usubtable->capacity();									// (mj)
-				auto new_capacity = 2 * std::max<size_t>(1, capacity);					// (mj)
-				auto new_subtable_bucket_count = 2 * new_capacity * (new_capacity - 1);	// (sj)
-
-				// Calculate new accumulated subtable allocation
-				size_t total_bucket_count = 0;											// (sum of sj)
-				for (size_t i = 0; i < m_table.size(); ++i)
-				{
-					if (i == bucket)
-					{
-						total_bucket_count += new_subtable_bucket_count;
-					}
-					else if (m_table[i] != nullptr)
-					{
-						total_bucket_count += m_table[i]->bucketCount();
-					}
-				}
-
-				auto dph_thresh = calculateDPHThresh();
-				if (total_bucket_count <= dph_thresh)
-				{
-					usubtable->rebuildTable(new_subtable_bucket_count, std::make_unique<pair_t>(pair));
-				}
-				else
-				{
-					fullRehash(pair);
-				}
-			}
-		}
-
 		++m_num_pairs;
-		return true;
+
+		// after a certain number of successful inserts, do a rebuild regardless
+		if (m_num_operations > m_capacity) return rebuildAndInsert(pair);
+
+		auto& bucket = getSubtable(pair.first);
+
+		// create subtable if it doesn't exist
+		if (!bucket) bucket = new FastLookupMap<K, V>();
+
+		// if we can insert without growing the subtable, do that
+		if (bucket->isUnderCapacity()) return bucket->insert(pair);
+
+		// else we need to see what the effect of adding the pair to the subtable would be
+
+		// Calculate new accumulated subtable allocation
+		size_t total_bucket_count = bucket->bucketCountAfterInsert(); // sum of sj
+		for (auto& b : m_table)
+		{
+			if (b && b != bucket) total_bucket_count += b->bucketCount();
+		}
+
+		if (isBelowCapacityThreshold(total_bucket_count)) return bucket->insert(pair);
+
+		// insert would unbalance table, rebuild
+		return rebuildAndInsert(pair);
 	}
 
 	// remove pair matching key from the table
@@ -284,59 +243,60 @@ public:
 	// return 1 if pair matching key is in table, else return 0
 	size_t count(const K& key) const
 	{
-		auto& usubtable = getSubtable(key);
-		return !usubtable ? 0 : usubtable->count(key);
+		auto& bucket = getSubtable(key);
+		return bucket && bucket->count(key);
 	}
 
 //private:
 
 	// convenience functions for getting the unique_ptr for a key
-	subtable_t& getSubtable(const K& key)
+	subtable_t*& getSubtable(const K& key)
 	{
 		return m_table.at(m_hash(key));
 	}
 
-	const subtable_t& getSubtable(const K& key) const
+	subtable_t* const& getSubtable(const K& key) const
 	{
 		return m_table.at(m_hash(key));
 	}
 
-	void fullRehash(const pair_t& new_pair)
+	bool rebuildAndInsert(const pair_t& new_pair)
 	{
-		fullRehash(std::make_unique<pair_t>(new_pair));
+		return fullRehash(new pair_t(new_pair));
 	}
 
-	void fullRehash(upair_t new_upair = upair_t())
+	bool fullRehash(pair_t* new_bucket_pair = nullptr)
 	{
-		// We do not want duplicate keys added to our table, otherwise our calculateHash/isHashPerfect fcns will loop indefinitely
-		if (new_upair != nullptr && count(new_upair->first))
+		// ensure duplicate keys are not added
+		if (new_bucket_pair != nullptr && count(new_bucket_pair->first))
 		{
-			new_upair.reset();
+			delete new_bucket_pair;
+			new_bucket_pair = nullptr;
 		}
 
-		upair_list_t upair_list;
+		bucket_list_t bucket_pair_list;
 		std::vector<size_t> hash_distribution;
-		hashed_upair_list_t hashed_upair_list;
+		hashed_bucket_list_t hashed_bucket_list;
 
-		size_t num_pairs = this->size();
-		upair_list.reserve(num_pairs + 1);
+		size_t num_pairs = m_num_pairs;
+		bucket_pair_list.reserve(num_pairs + 1);
 
-		moveTableToList(m_table, upair_list);
+		moveTableToList(m_table, bucket_pair_list);
 
-		// If arg new_upair exists, push onto list and update count
-		if (new_upair != nullptr)
+		// add new pair, if specified
+		if (new_bucket_pair)
 		{
-			upair_list.emplace_back(std::move(new_upair));
+			bucket_pair_list.push_back(new_bucket_pair);
 			++num_pairs;
 		}
 
-		m_capacity = (1 + m_C) * std::max(num_pairs, size_t(4));	// (M) Calculate new element number threshold
-		auto bucket_count = s(m_capacity);							// (s(M)) Calculate new number of partitions/buckets in Top Level Table
-		m_table.resize(bucket_count);								// Grow table if needed to accomodate new number of partitions/buckets
+		m_capacity = (1 + m_C) * std::max(num_pairs, size_t(4)); // (M) Calculate new element number threshold
+		auto bucket_count = s(m_capacity);                       // (s(M)) Calculate new number of partitions/buckets in Top Level Table
+		m_table.resize(bucket_count);                            // Grow table if needed to accomodate new number of partitions/buckets
 
-		m_hash = findBalancedHash(upair_list, m_table.size(), calculateDPHThresh(), hash_distribution);
+		m_hash = findBalancedHash(bucket_list, m_table.size(), hash_distribution);
 
-		hashUpairList(upair_list, hashed_upair_list, m_hash, hash_distribution);
+		hashUpairList(bucket_list, hashed_bucket_list, m_hash, hash_distribution);
 
 		// Reconstruct via hashed element list
 		for (size_t i = 0; i < m_table.size(); ++i)
@@ -345,39 +305,40 @@ public:
 			{
 				if (hash_distribution[i] != 0)
 				{
-					m_table[i] = std::make_unique<FastLookupMap<K, V>>(hashed_upair_list[i].begin(), hashed_upair_list[i].end());
+					m_table[i] = std::make_unique<FastLookupMap<K, V>>(hashed_bucket_list[i]);
 				}
 			}
 			else
 			{
-				m_table[i]->rebuildTable(hashed_upair_list[i].begin(), hashed_upair_list[i].end());
+				m_table[i]->rebuildTable(hashed_bucket_list[i]);
 			}
 		}
 
 		m_num_operations = 0;
+		return true;
 	}
 
-	void moveTableToList(table_t& table, upair_list_t& upair_list)
+	void moveTableToList(table_t& table, bucket_list_t& bucket_list)
 	{
-		// Can't use iterators, as they dereference unique_ptr and we want to deep copy them
-
-		for (auto& usubtable : table) // iterate over FastMap buckets
+		for (auto& bucket_subtable : table)
 		{
-			if (usubtable != nullptr)
+			if (!bucket_subtable) continue;
+
+			for (auto& bucket_pair : bucket_subtable->m_table)
 			{
-				auto& subtable = *usubtable.get();
-				for (auto& upair : subtable.m_table) // iterate over perfect_table buckets
+				if (bucket_pair)
 				{
-					if (upair != nullptr)
-					{
-						upair_list.emplace_back(std::move(upair));
-					}
+					bucket_list.push_back(bucket_pair);
+					bucket_pair = nullptr;
 				}
 			}
+
+			delete bucket_subtable;
+			bucket_subtable = nullptr;
 		}
 	}
 
-	hash_t findBalancedHash(const upair_list_t& upair_list, size_t num_buckets, double dph_thresh, std::vector<size_t>& hash_distribution)
+	hash_t findBalancedHash(const std::vector<bucket_t>& bucket_list, size_t num_buckets, std::vector<size_t>& hash_distribution)
 	{
 		hash_t hash;
 		size_t total_bucket_count;
@@ -392,7 +353,7 @@ public:
 			hash = random_hash<K>(num_buckets);
 
 			// Calculate hash distribution
-			for (const auto& x : upair_list)
+			for (const auto& x : bucket_list)
 			{
 				++hash_distribution.at(hash(x->first));
 			}
@@ -405,31 +366,37 @@ public:
 				total_bucket_count += 2 * capacity * (capacity - 1);	// (sj sum) cumulative bucket count of subtables
 			}
 
-		} while (total_bucket_count > dph_thresh);
+		}
+		while (!isBelowCapacityThreshold(total_bucket_count));
 
 		return hash;
 	}
 
-	void hashUpairList(upair_list_t& upair_list, hashed_upair_list_t& hashed_upair_list, hash_t hash, const std::vector<size_t>& hash_distribution)
+	void hashUpairList(std::vector<bucket_t>& bucket_list, hashed_bucket_list_t& hashed_bucket_list, hash_t hash, const std::vector<size_t>& hash_distribution)
 	{
-		hashed_upair_list.resize(hash_distribution.size());
+		hashed_bucket_list.resize(hash_distribution.size());
 
 		// Reserve each hashed element list to its expected count
 		for (size_t i = 0; i < hash_distribution.size(); ++i)
 		{
-			hashed_upair_list[i].reserve(hash_distribution[i]);
+			hashed_bucket_list[i].reserve(hash_distribution[i]);
 		}
 
 		// Distribute full element list over 2D hashed element list
-		for (auto& e : upair_list)
+		for (auto& e : bucket_list)
 		{
-			hashed_upair_list.at(hash(e->first)).emplace_back(std::move(e));
+			hashed_bucket_list.at(hash(e->first)).emplace_back(std::move(e));
 		}
 	}
 
 	double calculateDPHThresh()
 	{
 		return ((32.0 * std::pow(m_capacity, 2)) / m_table.size()) + 4.0 * m_capacity;
+	}
+
+	bool isBelowCapacityThreshold(size_t bucket_count)
+	{
+		return (bucket_count - 4 * m_capacity) * m_table.size() <= 32 * m_capacity * m_capacity;
 	}
 
 	size_t s(size_t M) const
@@ -447,7 +414,7 @@ public:
 		return hashKey(hash, pair.first);
 	}
 
-	size_t hashKey(hash_t hash, const upair_t& pair) const
+	size_t hashKey(hash_t hash, const bucket_t& pair) const
 	{
 		return hashKey(hash, pair->first);
 	}
