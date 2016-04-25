@@ -34,7 +34,7 @@ inline unsigned int random_uint(unsigned int min, unsigned int max = std::numeri
 
 // return a random hash function onto [0, range)
 template <class K>
-std::function<size_t(K)> random_hash(uint32_t range)
+std::function<size_t(K)> random_hash(size_t range)
 {
 	if (HASH_PRIME < range) throw std::out_of_range("random_hash requested range is larger than HASH_PRIME");
 

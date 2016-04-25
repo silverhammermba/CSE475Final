@@ -5,7 +5,6 @@ contact spear, ask about:
 fine-tune lock placement (hashmap_locking branch, insert fcn)
 figure out effect of constants
 
-fix all uint32_t conversions
 make cfg iters total, not per-thread
 make test run multiple attempts and report and average (maybe with variations?)
 think about thread-safety/efficiency of RNG
@@ -17,3 +16,4 @@ replace unique_ptrs with normal pointers
 use integer comparison for DPH thresh
 add arg parsing for tests
 remove useless iterators
+fix all uint32_t conversions
