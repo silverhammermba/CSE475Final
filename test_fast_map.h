@@ -1,8 +1,10 @@
-#pragma once
 #ifndef TEST_FAST_MAP_H
 #define TEST_FAST_MAP_H
 
+#include <stdexcept>
+#include <utility>
 #include <vector>
+
 #include "fast_map.h"
 #include "gtest_include.h"
 

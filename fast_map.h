@@ -1,11 +1,12 @@
 #ifndef FAST_MAP_H
 #define FAST_MAP_H
 
+#include <algorithm>
 #include <functional>
-#include <memory>
 #include <stdexcept>
 #include <utility>
 #include <vector>
+
 #include "fast_lookup_map.h"
 
 template <class K, class V>

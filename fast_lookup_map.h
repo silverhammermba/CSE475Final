@@ -1,12 +1,10 @@
 #ifndef FAST_LOOKUP_MAP_H
 #define FAST_LOOKUP_MAP_H
 
+#include <algorithm>
 #include <cstddef>
 #include <functional>
-#include <iterator>
-#include <memory>
 #include <stdexcept>
-#include <type_traits>
 #include <utility>
 #include <vector>
 

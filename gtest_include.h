@@ -1,12 +1,11 @@
-#pragma once
 #ifndef GTEST_H
 #define GTEST_H
 
 #ifdef _WIN32 // supress warnings on Windows
-#pragma warning (push)
+#pragma warning(push)
 #pragma warning(disable: 4251 4275)
 #include <gmock\gmock.h>
-#pragma warning( pop)
+#pragma warning(pop)
 #else
 #include <gtest/gtest.h>
 #endif
