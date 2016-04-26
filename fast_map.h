@@ -11,34 +11,13 @@
 template <class K, class V>
 class FastMap
 {
-public:
 	typedef std::function<size_t(K)> hash_t;
 	typedef std::pair<const K, V> pair_t;
 	typedef FastLookupMap<K, V> subtable_t;
 	typedef std::vector<subtable_t*> table_t;
 	typedef std::vector<pair_t*> st_table_t; // the internal table type for the subtables (used during rebuilds)
 
-	// constants determining growth rates. TODO what happens when we vary these?
-	static const size_t THRESHOLD_SCALE = 2; // c, controls how the threshold scales based on number known pairs
-	static const size_t ST_BUCKET_SCALE = 3; // controls how number of buckets (for subtables) scales with the threshold
-	/* XXX in the paper they choose this to be 8 * sqrt(30) / 15 = 2.921,
-	 * in order to prove the linear space requirement of the map
-	 */
-
-	// what should the threshold be if we need to store num_pairs pairs?
-	// (1 + c) * n
-	static size_t thresholdFromNumPairs(size_t num_pairs)
-	{
-		return (1 + THRESHOLD_SCALE) * std::max(num_pairs, (size_t)4);
-	}
-
-	// how many subtable buckets should we have for the current threshold?
-	// s(M)
-	static size_t stBucketCountFromThreshold(size_t threshold)
-	{
-		return ST_BUCKET_SCALE * threshold;
-	}
-
+public:
 	// construct with a hint that we need to store at least num_pairs pairs
 	FastMap(size_t num_pairs = 0)
 		: m_num_operations{0},
@@ -137,8 +116,28 @@ public:
 	}
 
 private:
+	// constants determining growth rates. TODO what happens when we vary these?
+	static const size_t THRESHOLD_SCALE = 2; // c, controls how the threshold scales based on number known pairs
+	static const size_t ST_BUCKET_SCALE = 3; // controls how number of buckets (for subtables) scales with the threshold
+	/* XXX in the paper they choose this to be 8 * sqrt(30) / 15 = 2.921,
+	 * in order to prove the linear space requirement of the map
+	 */
 
-	// convenience functions for getting the unique_ptr for a key
+	// what should the threshold be if we need to store num_pairs pairs?
+	// (1 + c) * n
+	static size_t thresholdFromNumPairs(size_t num_pairs)
+	{
+		return (1 + THRESHOLD_SCALE) * std::max(num_pairs, (size_t)4);
+	}
+
+	// how many subtable buckets should we have for the current threshold?
+	// s(M)
+	static size_t stBucketCountFromThreshold(size_t threshold)
+	{
+		return ST_BUCKET_SCALE * threshold;
+	}
+
+	// convenience functions for getting the subtable bucket for a key
 	subtable_t*& getSubtable(const K& key)
 	{
 		return m_table.at(m_hash(key));
@@ -180,7 +179,7 @@ private:
 
 		// move all pairs from subtales into a list
 		size_t num_pairs = m_num_pairs;
-		st_table_t buckets = moveTableToList(m_table, num_pairs + 1);
+		st_table_t buckets = moveBucketsToList(num_pairs + 1);
 
 		// add new pair, if specified
 		if (new_bucket)
@@ -207,7 +206,7 @@ private:
 		{
 			// resize if subtable exists
 			if (m_table[i])
-				m_table[i]->resize(hash_distribution[i]);
+				m_table[i]->reserve(hash_distribution[i]);
 			// else make a new subtable if needed
 			else if (hash_distribution[i])
 				m_table[i] = new FastLookupMap<K, V>(hash_distribution[i]);
@@ -222,12 +221,12 @@ private:
 
 	// move all the nonempty buckets out of the subtables and into one list
 	// this places the map in an inconsistent state
-	st_table_t moveTableToList(table_t& table, size_t size_hint = 0)
+	st_table_t moveBucketsToList(size_t size_hint = 0)
 	{
 		st_table_t buckets;
 		buckets.reserve(size_hint);
 
-		for (auto& st_bucket : table)
+		for (auto& st_bucket : m_table)
 		{
 			if (!st_bucket) continue;
 
@@ -246,6 +245,7 @@ private:
 
 	// calculate a balanced hash onto num_st_buckets for the pairs in buckets.
 	// return the hash and the distribution of pairs in the subtables
+	// TODO maybe resize m_table in place rather than calculating hash_distribution?
 	std::pair<hash_t, std::vector<size_t>> findBalancedHash(const st_table_t& buckets, size_t num_st_buckets) const
 	{
 		hash_t hash;
@@ -274,23 +274,6 @@ private:
 	{
 		if (bucket_count <= 4 * m_threshold) return true;
 		return (bucket_count - 4 * m_threshold) * m_table.size() <= 32 * m_threshold * m_threshold;
-	}
-
-	// shortcuts for finding hash values
-
-	size_t hashKey(const hash_t& hash, const K& key) const
-	{
-		return hash(key);
-	}
-
-	size_t hashKey(const hash_t& hash, const pair_t& pair) const
-	{
-		return hashKey(hash, pair.first);
-	}
-
-	size_t hashKey(const hash_t& hash, pair_t* const& pair) const
-	{
-		return hashKey(hash, pair->first);
 	}
 
 	table_t m_table;                // internal hash table
