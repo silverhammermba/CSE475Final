@@ -10,6 +10,22 @@
 //       When # partitions decreases, is it better to reduce memory allocation or to track separate partition count
 namespace po = boost::program_options;
 
+// parse what kind of task to run
+std::istream& operator>>(std::istream& in, Task& task)
+{
+	std::string token;
+	in >> token;
+	if (token == "r")
+		task = Task::READ;
+	else if (token == "w")
+		task = Task::WRITE;
+	else if (token == "b")
+		task = Task::BALANCED;
+	else
+		throw po::validation_error(po::validation_error::invalid_option_value);
+	return in;
+}
+
 int main(int argc, char** argv)
 {
 	po::options_description desc("Allowed options");
@@ -19,6 +35,7 @@ int main(int argc, char** argv)
 		("key-max,k", po::value<int>()->required(), "upper bound of random keys")
 		("threads,t", po::value<int>()->required(), "number of threads")
 		("iters,i", po::value<int>()->required(), "number of iterations per-thread")
+		("task,a", po::value<Task>()->required(), "type of task to test r/w/b for reads/write/balanced")
 	;
 
 	po::variables_map options;
@@ -41,7 +58,8 @@ int main(int argc, char** argv)
 	std::cout << speed_test<FastMap<int, int>>(
 		options["key-max"].as<int>(),
 		options["threads"].as<int>(),
-		options["iters"].as<int>()
+		options["iters"].as<int>(),
+		options["task"].as<Task>()
 	) << std::endl;
 
 	return EXIT_SUCCESS;
