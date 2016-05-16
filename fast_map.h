@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -35,14 +36,17 @@ public:
 
 	size_t size() const
 	{
+		std::lock_guard<std::mutex> lock(m_mutex);
 		return m_num_pairs;
 	}
 
 	// try to insert pair into the hash table
 	bool insert(const pair_t& pair)
 	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+
 		// check for duplicate key
-		if (count(pair.first)) return false;
+		if (locked_count(pair.first)) return false;
 
 		++m_num_operations;
 		++m_num_pairs;
@@ -83,14 +87,16 @@ public:
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
-		if (!count(key)) return 0;
+		std::lock_guard<std::mutex> lock(m_mutex);
+
+		if (!locked_count(key)) return 0;
 
 		++m_num_operations;
 		auto& st_bucket = getSubtable(key);
 		st_bucket->erase(key);
 		--m_num_pairs;
 
-		if (m_num_operations >= m_threshold) rebuild();
+		if (m_num_operations >= m_threshold) locked_rebuild();
 
 		return 1;
 	}
@@ -98,7 +104,8 @@ public:
 	// return the value matching key
 	V at(const K& key) const
 	{
-		if (!count(key)) throw std::out_of_range("FastMap::at");
+		std::lock_guard<std::mutex> lock(m_mutex);
+		if (!locked_count(key)) throw std::out_of_range("FastMap::at");
 		auto& usubtable = getSubtable(key);
 		return !usubtable ? 0 : usubtable->at(key);
 	}
@@ -106,6 +113,7 @@ public:
 	// return 1 if pair matching key is in table, else return 0
 	size_t count(const K& key) const
 	{
+		std::lock_guard<std::mutex> lock(m_mutex);
 		auto& st_bucket = getSubtable(key);
 		return st_bucket && st_bucket->count(key);
 	}
@@ -113,10 +121,24 @@ public:
 	// rebuild the entire table
 	void rebuild()
 	{
+		std::lock_guard<std::mutex> lock(m_mutex);
 		insertAndRebuild(nullptr);
 	}
 
 private:
+	// same as rebuild but assumes m_mutex is already locked
+	void locked_rebuild()
+	{
+		insertAndRebuild(nullptr);
+	}
+
+	// same as count but assumes m_mutex is already locked
+	size_t locked_count(const K& key) const
+	{
+		auto& st_bucket = getSubtable(key);
+		return st_bucket && st_bucket->count(key);
+	}
+
 	// constants determining growth rates. TODO what happens when we vary these?
 	static const size_t THRESHOLD_SCALE = 2; // c, controls how the threshold scales based on number known pairs
 	static const size_t ST_BUCKET_SCALE = 3; // controls how number of buckets (for subtables) scales with the threshold
@@ -171,7 +193,7 @@ private:
 		bool inserted = new_bucket != nullptr;
 
 		// ensure duplicate keys are not added
-		if (new_bucket && count(new_bucket->first))
+		if (new_bucket && locked_count(new_bucket->first))
 		{
 			delete new_bucket;
 			new_bucket = nullptr;
@@ -288,6 +310,8 @@ private:
 	 *   - how many buckets there are at the top level
 	 *   - whether the subtables are unbalanced and must be rebuilt
 	 */
+
+	mutable std::mutex m_mutex;
 };
 
 #endif
