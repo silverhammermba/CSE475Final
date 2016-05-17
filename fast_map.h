@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
+#include <boost/thread/locks.hpp>
+#include <boost/thread/shared_mutex.hpp>
 
 #include "fast_lookup_map.h"
 
@@ -18,6 +20,9 @@ class FastMap
 	typedef std::vector<subtable_t*> table_t;
 	typedef std::vector<pair_t*> st_table_t; // the internal table type for the subtables (used during rebuilds)
 
+	typedef boost::upgrade_lock<boost::upgrade_mutex> read_lock_t;
+	typedef boost::unique_lock<boost::upgrade_mutex> write_lock_t;
+	typedef boost::upgrade_to_unique_lock<boost::upgrade_mutex> readwrite_lock_t;
 public:
 	// construct with a hint that we need to store at least num_pairs pairs
 	FastMap(size_t num_pairs = 0)
@@ -25,7 +30,7 @@ public:
 		m_num_pairs{0},
 		m_threshold{thresholdFromNumPairs(num_pairs)}
 	{
-		rebuild();
+		rebuildLocked();
 	}
 
 	~FastMap()
@@ -35,22 +40,27 @@ public:
 
 	size_t size() const
 	{
+		read_lock_t rlock(m_mutex);
 		return m_num_pairs;
 	}
 
 	// try to insert pair into the hash table
 	bool insert(const pair_t& pair)
 	{
+		read_lock_t rlock(m_mutex);
+
 		// check for duplicate key
 		if (count(pair.first)) return false;
+
+		readwrite_lock_t rwlock(rlock);
 
 		++m_num_operations;
 		++m_num_pairs;
 
 		// after a certain number of successful inserts, do a rebuild regardless
-		if (m_num_operations > m_threshold) return insertAndRebuild(pair);
+		if (m_num_operations > m_threshold) return insertAndRebuildLocked(pair);
 
-		auto& st_bucket = getSubtable(pair.first);
+		auto& st_bucket = getSubtableLocked(pair.first);
 
 		// create subtable if it doesn't exist
 		if (!st_bucket) st_bucket = new FastLookupMap<K, V>();
@@ -74,23 +84,27 @@ public:
 		}
 
 		// if the insert would be balanced, do that
-		if (isBucketCountBalanced(num_buckets)) return st_bucket->insert(pair);
+		if (isBucketCountBalancedLocked(num_buckets)) return st_bucket->insert(pair);
 
 		// else insert would unbalance table, rebuild
-		return insertAndRebuild(pair);
+		return insertAndRebuildLocked(pair);
 	}
 
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
+		read_lock_t rlock(m_mutex);
+
 		if (!count(key)) return 0;
 
+		readwrite_lock_t rwlock(rlock);
+
 		++m_num_operations;
-		auto& st_bucket = getSubtable(key);
+		auto& st_bucket = getSubtableLocked(key);
 		st_bucket->erase(key);
 		--m_num_pairs;
 
-		if (m_num_operations >= m_threshold) rebuild();
+		if (m_num_operations >= m_threshold) rebuildLocked();
 
 		return 1;
 	}
@@ -98,22 +112,26 @@ public:
 	// return the value matching key
 	V at(const K& key) const
 	{
+		read_lock_t rlock(m_mutex);
+
 		if (!count(key)) throw std::out_of_range("FastMap::at");
-		auto& usubtable = getSubtable(key);
+		auto& usubtable = getSubtableLocked(key);
 		return !usubtable ? 0 : usubtable->at(key);
 	}
 
 	// return 1 if pair matching key is in table, else return 0
 	size_t count(const K& key) const
 	{
-		auto& st_bucket = getSubtable(key);
+		read_lock_t rlock(m_mutex);
+		auto& st_bucket = getSubtableLocked(key);
 		return st_bucket && st_bucket->count(key);
 	}
 
 	// rebuild the entire table
 	void rebuild()
 	{
-		insertAndRebuild(nullptr);
+		write_lock_t wlock(m_mutex);
+		insertAndRebuildLocked(nullptr);
 	}
 
 private:
@@ -138,25 +156,39 @@ private:
 		return ST_BUCKET_SCALE * threshold;
 	}
 
+	// return 1 if pair matching key is in table, else return 0
+	size_t countLocked(const K& key) const
+	{
+		auto& st_bucket = getSubtableLocked(key);
+		return st_bucket && st_bucket->count(key);
+	}
+
 	// convenience functions for getting the subtable bucket for a key
-	subtable_t*& getSubtable(const K& key)
+	// XXX m_mutex MUST be owned (shared or unique) by the calling thread
+	subtable_t*& getSubtableLocked(const K& key)
 	{
 		return m_table.at(m_hash(key));
 	}
 
-	subtable_t* const& getSubtable(const K& key) const
+	subtable_t* const& getSubtableLocked(const K& key) const
 	{
 		return m_table.at(m_hash(key));
 	}
 
-	// insert a new pair and rebuild the entire table
-	bool insertAndRebuild(const pair_t& new_pair)
+	// rebuild the entire table
+	void rebuildLocked()
 	{
-		return insertAndRebuild(new pair_t(new_pair));
+		insertAndRebuildLocked(nullptr);
 	}
 
 	// insert a new pair (if non-null) and rebuild the entire table
-	bool insertAndRebuild(pair_t* new_bucket)
+	bool insertAndRebuildLocked(const pair_t& new_pair)
+	{
+		return insertAndRebuildLocked(new pair_t(new_pair));
+	}
+
+	// insert a new pair (if non-null) and rebuild the entire table
+	bool insertAndRebuildLocked(pair_t* new_bucket)
 	{
 		// if the table is empty (and we aren't inserting) rebuilding is easy
 		if (!new_bucket && m_num_pairs == 0)
@@ -171,7 +203,7 @@ private:
 		bool inserted = new_bucket != nullptr;
 
 		// ensure duplicate keys are not added
-		if (new_bucket && count(new_bucket->first))
+		if (new_bucket && countLocked(new_bucket->first))
 		{
 			delete new_bucket;
 			new_bucket = nullptr;
@@ -180,7 +212,7 @@ private:
 
 		// move all pairs from subtales into a list
 		size_t num_pairs = m_num_pairs;
-		st_table_t buckets = moveBucketsToList(num_pairs + 1);
+		st_table_t buckets = moveBucketsToListLocked(num_pairs + 1);
 
 		// add new pair, if specified
 		if (new_bucket)
@@ -198,7 +230,7 @@ private:
 		m_table.resize(stBucketCountFromThreshold(m_threshold));
 
 		// get balanced hash and hash distribution
-		auto hd_pair = findBalancedHash(buckets, m_table.size());
+		auto hd_pair = findBalancedHashLocked(buckets, m_table.size());
 		m_hash = hd_pair.first;
 		auto& hash_distribution = hd_pair.second;
 
@@ -214,7 +246,7 @@ private:
 		}
 
 		// move pairs from list back into subtables
-		for (auto& b : buckets) getSubtable(b->first)->insert(b);
+		for (auto& b : buckets) getSubtableLocked(b->first)->insert(b);
 
 		m_num_operations = 0;
 		return inserted;
@@ -222,7 +254,7 @@ private:
 
 	// move all the nonempty buckets out of the subtables and into one list
 	// this places the map in an inconsistent state
-	st_table_t moveBucketsToList(size_t size_hint = 0)
+	st_table_t moveBucketsToListLocked(size_t size_hint = 0)
 	{
 		st_table_t buckets;
 		buckets.reserve(size_hint);
@@ -247,7 +279,7 @@ private:
 	// calculate a balanced hash onto num_st_buckets for the pairs in buckets.
 	// return the hash and the distribution of pairs in the subtables
 	// TODO maybe resize m_table in place rather than calculating hash_distribution?
-	std::pair<hash_t, std::vector<size_t>> findBalancedHash(const st_table_t& buckets, size_t num_st_buckets) const
+	std::pair<hash_t, std::vector<size_t>> findBalancedHashLocked(const st_table_t& buckets, size_t num_st_buckets) const
 	{
 		hash_t hash;
 		size_t num_buckets;
@@ -265,13 +297,13 @@ private:
 			num_buckets = 0;
 			for (auto size : hash_distribution) num_buckets += subtable_t::numBucketsFromNumPairs(size);
 		}
-		while (!isBucketCountBalanced(num_buckets));
+		while (!isBucketCountBalancedLocked(num_buckets));
 
 		return std::make_pair(hash, hash_distribution);
 	}
 
 	// would the given total number of buckets be balanced for the current threshold?
-	bool isBucketCountBalanced(size_t bucket_count) const
+	bool isBucketCountBalancedLocked(size_t bucket_count) const
 	{
 		if (bucket_count <= 4 * m_threshold) return true;
 		return (bucket_count - 4 * m_threshold) * m_table.size() <= 32 * m_threshold * m_threshold;
@@ -288,6 +320,9 @@ private:
 	 *   - how many buckets there are at the top level
 	 *   - whether the subtables are unbalanced and must be rebuilt
 	 */
+
+	mutable boost::upgrade_mutex m_mutex;
+	mutable boost::mutex m_st_mutex;
 };
 
 #endif

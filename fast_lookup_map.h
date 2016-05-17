@@ -316,6 +316,7 @@ private:
 	hash_t m_hash;        // hash function
 	size_t m_num_pairs;   // how many pairs are currently stored
 	size_t m_capacity;    // how many pairs can be stored without rebuilding
+
 	mutable boost::upgrade_mutex m_mutex;
 };
 
