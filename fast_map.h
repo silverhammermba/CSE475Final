@@ -52,21 +52,26 @@ public:
 		// check for duplicate key
 		if (count(pair.first)) return false;
 
-		readwrite_lock_t rwlock(rlock);
-
-		++m_num_operations;
-		++m_num_pairs;
-
 		// after a certain number of successful inserts, do a rebuild regardless
-		if (m_num_operations > m_threshold) return insertAndRebuildLocked(pair);
+		if (m_num_operations >= m_threshold) return insertAndRebuild(pair);
 
 		auto& st_bucket = getSubtableLocked(pair.first);
 
 		// create subtable if it doesn't exist
-		if (!st_bucket) st_bucket = new FastLookupMap<K, V>();
+		if (!st_bucket)
+		{
+			readwrite_lock_t rwlock(rlock);
+			st_bucket = new FastLookupMap<K, V>();
+		}
 
 		// if we can insert without growing the subtable, do that
-		if (st_bucket->isUnderCapacity()) return st_bucket->insert(pair);
+		if (st_bucket->isUnderCapacity())
+		{
+			++m_num_operations;
+			++m_num_pairs;
+
+			return st_bucket->insert(pair);
+		}
 
 		// else we need to see what the effect of adding the pair to the subtable would be
 
@@ -84,7 +89,13 @@ public:
 		}
 
 		// if the insert would be balanced, do that
-		if (isBucketCountBalancedLocked(num_buckets)) return st_bucket->insert(pair);
+		if (isBucketCountBalanced(num_buckets, m_table.size(), m_threshold))
+		{
+			++m_num_operations;
+			++m_num_pairs;
+
+			return st_bucket->insert(pair);
+		}
 
 		// else insert would unbalance table, rebuild
 		return insertAndRebuildLocked(pair);
@@ -97,11 +108,12 @@ public:
 
 		if (!count(key)) return 0;
 
+		auto& st_bucket = getSubtableLocked(key);
+		st_bucket->erase(key);
+
 		readwrite_lock_t rwlock(rlock);
 
 		++m_num_operations;
-		auto& st_bucket = getSubtableLocked(key);
-		st_bucket->erase(key);
 		--m_num_pairs;
 
 		if (m_num_operations >= m_threshold) rebuildLocked();
@@ -156,6 +168,38 @@ private:
 		return ST_BUCKET_SCALE * threshold;
 	}
 
+	// find a balanced hash onto num_st_buckets for the pairs in buckets and the given threshold.
+	// return the hash and the distribution of pairs in the subtables
+	static std::pair<hash_t, std::vector<size_t>> findBalancedHash(const st_table_t& buckets, size_t num_st_buckets, size_t threshold)
+	{
+		hash_t hash;
+		size_t num_buckets;
+		std::vector<size_t> hash_distribution(num_st_buckets);
+
+		do
+		{
+			hash = random_hash<K>(num_st_buckets);
+
+			// Calculate hash distribution
+			std::fill(hash_distribution.begin(), hash_distribution.end(), 0);
+			for (const auto& b : buckets) ++hash_distribution.at(hash(b->first));
+
+			// Determine number of buckets in resulting subtables
+			num_buckets = 0;
+			for (auto size : hash_distribution) num_buckets += subtable_t::numBucketsFromNumPairs(size);
+		}
+		while (!isBucketCountBalanced(num_buckets, num_st_buckets, threshold));
+
+		return std::make_pair(hash, hash_distribution);
+	}
+
+	// would the given total number of buckets be balanced for the threshold and number of subtable buckets?
+	static bool isBucketCountBalanced(size_t bucket_count, size_t st_bucket_count, size_t threshold)
+	{
+		if (bucket_count <= 4 * threshold) return true;
+		return (bucket_count - 4 * threshold) * st_bucket_count <= 32 * threshold * threshold;
+	}
+
 	// return 1 if pair matching key is in table, else return 0
 	size_t countLocked(const K& key) const
 	{
@@ -181,6 +225,13 @@ private:
 		insertAndRebuildLocked(nullptr);
 	}
 
+	bool insertAndRebuild(const pair_t& new_pair)
+	{
+		write_lock_t wlock(m_mutex);
+		return insertAndRebuildLocked(new pair_t(new_pair));
+	}
+
+
 	// insert a new pair (if non-null) and rebuild the entire table
 	bool insertAndRebuildLocked(const pair_t& new_pair)
 	{
@@ -188,6 +239,7 @@ private:
 	}
 
 	// insert a new pair (if non-null) and rebuild the entire table
+	// updates m_num_pairs and m_threshold, sets m_num_operations to 0
 	bool insertAndRebuildLocked(pair_t* new_bucket)
 	{
 		// if the table is empty (and we aren't inserting) rebuilding is easy
@@ -211,26 +263,23 @@ private:
 		}
 
 		// move all pairs from subtales into a list
-		size_t num_pairs = m_num_pairs;
-		st_table_t buckets = moveBucketsToListLocked(num_pairs + 1);
+		st_table_t buckets = moveBucketsToListLocked(m_num_pairs + 1);
 
 		// add new pair, if specified
-		if (new_bucket)
-		{
-			buckets.push_back(new_bucket);
-			++num_pairs;
-		}
+		if (new_bucket) buckets.push_back(new_bucket);
+
+		m_num_pairs = buckets.size();
 
 		/* TODO
 		 * worry about threshold (thus m_table) shrinking and leaking memory.
 		 * do we even want threshold to be able to shrink e.g. if we are given
 		 * a hint for a large threshold in the constructor?
 		 */
-		m_threshold = thresholdFromNumPairs(num_pairs);
+		m_threshold = thresholdFromNumPairs(m_num_pairs);
 		m_table.resize(stBucketCountFromThreshold(m_threshold));
 
 		// get balanced hash and hash distribution
-		auto hd_pair = findBalancedHashLocked(buckets, m_table.size());
+		auto hd_pair = findBalancedHash(buckets, m_table.size(), m_threshold);
 		m_hash = hd_pair.first;
 		auto& hash_distribution = hd_pair.second;
 
@@ -274,39 +323,6 @@ private:
 		}
 
 		return buckets;
-	}
-
-	// calculate a balanced hash onto num_st_buckets for the pairs in buckets.
-	// return the hash and the distribution of pairs in the subtables
-	// TODO maybe resize m_table in place rather than calculating hash_distribution?
-	std::pair<hash_t, std::vector<size_t>> findBalancedHashLocked(const st_table_t& buckets, size_t num_st_buckets) const
-	{
-		hash_t hash;
-		size_t num_buckets;
-		std::vector<size_t> hash_distribution(num_st_buckets);
-
-		do
-		{
-			hash = random_hash<K>(num_st_buckets);
-
-			// Calculate hash distribution
-			std::fill(hash_distribution.begin(), hash_distribution.end(), 0);
-			for (const auto& b : buckets) ++hash_distribution.at(hash(b->first));
-
-			// Determine number of buckets in resulting subtables
-			num_buckets = 0;
-			for (auto size : hash_distribution) num_buckets += subtable_t::numBucketsFromNumPairs(size);
-		}
-		while (!isBucketCountBalancedLocked(num_buckets));
-
-		return std::make_pair(hash, hash_distribution);
-	}
-
-	// would the given total number of buckets be balanced for the current threshold?
-	bool isBucketCountBalancedLocked(size_t bucket_count) const
-	{
-		if (bucket_count <= 4 * m_threshold) return true;
-		return (bucket_count - 4 * m_threshold) * m_table.size() <= 32 * m_threshold * m_threshold;
 	}
 
 	table_t m_table;                // internal hash table
