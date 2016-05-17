@@ -50,15 +50,20 @@ public:
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
-		read_lock_t rlock(m_mutex);
-
+		// try to bail out early with just a shared lock
 		if (!count(key)) return 0;
 
-		readwrite_lock_t rwlock(rlock);
+		// else get a unique lock
+		write_lock_t wlock(m_mutex);
 
+		// confirm that the key is really there
+		auto& bucket = getBucketLocked(key);
+		if (!bucket || bucket->first != key) return 0;
+
+		// remove it
+		delete bucket;
+		bucket = nullptr;
 		--m_num_pairs;
-		delete getBucketLocked(key);
-		getBucketLocked(key) = nullptr;
 
 		return 1;
 	}
@@ -67,8 +72,9 @@ public:
 	const V& at(const K& key) const
 	{
 		read_lock_t rlock(m_mutex);
-		if (!count(key)) throw std::out_of_range("FastLookupMap::at");
-		return getBucketLocked(key)->second;
+		auto bucket = getBucketLocked(key);
+		if (!bucket || bucket->first != key) throw std::out_of_range("FastLookupMap::at");
+		return bucket->second;
 	}
 
 	// return 1 if pair matching key is in table, else return 0
@@ -207,33 +213,36 @@ private:
 	}
 
 	// try to insert pair (if non-null), rebuilding if necessary
-	bool insert(pair_t* bucket)
+	bool insert(pair_t* new_bucket)
 	{
-		read_lock_t rlock(m_mutex);
+		// try to bail out early without a unique lock
 
 		// check for null/duplicate
-		if (!bucket) return false;
-		if (count(bucket->first))
+		if (!new_bucket) return false;
+
+		if (count(new_bucket->first))
 		{
-			delete bucket;
+			delete new_bucket;
 			return false;
 		}
 
-		readwrite_lock_t rwlock(rlock);
+		write_lock_t wlock(m_mutex);
+
+		// now that we have a unique lock, double check
+		auto& bucket = getBucketLocked(new_bucket->first);
+		if (bucket && bucket->first == new_bucket->first) return false;
 
 		++m_num_pairs;
 
 		// if we're over capacity or there is a collision
-		if (m_num_pairs > m_capacity || getBucketLocked(bucket->first))
+		if (m_num_pairs > m_capacity || bucket)
 		{
 			// force the new pair into the table and then rebuild
-			m_table.push_back(bucket);
+			m_table.push_back(new_bucket);
 			rebuildLocked();
-			return true;
 		}
-
-		// no collision, under capacity. simple insert
-		getBucketLocked(bucket->first) = bucket;
+		else // no collision, under capacity. simple insert
+			bucket = new_bucket;
 
 		return true;
 	}
@@ -278,8 +287,6 @@ private:
 	// XXX m_mutex MUST be uniquely owned by the calling thread
 	void rebuildLocked()
 	{
-		// assert write locked
-
 		// rebuilding is really easy if it's empty
 		if (m_num_pairs == 0)
 		{
@@ -287,10 +294,6 @@ private:
 			m_hash = random_hash<K>(m_table.size());
 			return;
 		}
-
-		// if we're over capacity, double it
-		while (m_num_pairs > m_capacity) m_capacity *= 2;
-		auto new_table_size = numBucketsFromCapacity(m_capacity);
 
 		// move all pairs into a temporary vector
 		table_t buckets;
@@ -303,6 +306,12 @@ private:
 				bucket = nullptr;
 			}
 		}
+
+		m_num_pairs = buckets.size();
+
+		// if we're over capacity, double it
+		while (m_num_pairs > m_capacity) m_capacity *= 2;
+		auto new_table_size = numBucketsFromCapacity(m_capacity);
 
 		// find a new hash function
 		m_hash = findCollisionFreeHash(buckets, new_table_size);

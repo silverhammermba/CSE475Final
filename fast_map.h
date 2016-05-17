@@ -132,7 +132,7 @@ public:
 	}
 
 	// return the value matching key
-	V at(const K& key) const
+	const V& at(const K& key) const
 	{
 		read_lock_t rlock(m_mutex);
 
