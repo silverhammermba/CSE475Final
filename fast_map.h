@@ -188,6 +188,7 @@ private:
 	}
 
 	// insert a new pair (if non-null) and rebuild the entire table
+	// updates m_num_pairs and m_threshold, sets m_num_operations to 0
 	bool insertAndRebuild(pair_t* new_bucket)
 	{
 		// if the table is empty (and we aren't inserting) rebuilding is easy
