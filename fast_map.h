@@ -20,8 +20,8 @@ class FastMap
 	typedef std::vector<subtable_t*> table_t;
 	typedef std::vector<pair_t*> st_table_t; // the internal table type for the subtables (used during rebuilds)
 
-	typedef boost::shared_lock<boost::upgrade_mutex> read_lock_t;
-	typedef boost::unique_lock<boost::upgrade_mutex> write_lock_t;
+	typedef boost::shared_lock<boost::shared_mutex> read_lock_t;
+	typedef boost::unique_lock<boost::shared_mutex> write_lock_t;
 public:
 	// construct with a hint that we need to store at least num_pairs pairs
 	FastMap(size_t num_pairs = 0)
@@ -322,7 +322,7 @@ private:
 	 *   - whether the subtables are unbalanced and must be rebuilt
 	 */
 
-	mutable boost::upgrade_mutex m_mutex;
+	mutable boost::shared_mutex m_mutex;
 };
 
 #endif
