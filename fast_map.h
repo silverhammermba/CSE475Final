@@ -44,11 +44,8 @@ public:
 		// check for duplicate key
 		if (count(pair.first)) return false;
 
-		++m_num_operations;
-		++m_num_pairs;
-
 		// after a certain number of successful inserts, do a rebuild regardless
-		if (m_num_operations > m_threshold) return insertAndRebuild(pair);
+		if (m_num_operations >= m_threshold) return insertAndRebuild(pair);
 
 		auto& st_bucket = getSubtable(pair.first);
 
@@ -56,7 +53,13 @@ public:
 		if (!st_bucket) st_bucket = new FastLookupMap<K, V>();
 
 		// if we can insert without growing the subtable, do that
-		if (st_bucket->isUnderCapacity()) return st_bucket->insert(pair);
+		if (st_bucket->isUnderCapacity())
+		{
+			++m_num_operations;
+			++m_num_pairs;
+
+			return st_bucket->insert(pair);
+		}
 
 		// else we need to see what the effect of adding the pair to the subtable would be
 
@@ -74,7 +77,13 @@ public:
 		}
 
 		// if the insert would be balanced, do that
-		if (isBucketCountBalanced(num_buckets, m_table.size(), m_threshold)) return st_bucket->insert(pair);
+		if (isBucketCountBalanced(num_buckets, m_table.size(), m_threshold))
+		{
+			++m_num_operations;
+			++m_num_pairs;
+
+			return st_bucket->insert(pair);
+		}
 
 		// else insert would unbalance table, rebuild
 		return insertAndRebuild(pair);
@@ -85,9 +94,11 @@ public:
 	{
 		if (!count(key)) return 0;
 
-		++m_num_operations;
 		auto& st_bucket = getSubtable(key);
+
 		st_bucket->erase(key);
+
+		++m_num_operations;
 		--m_num_pairs;
 
 		if (m_num_operations >= m_threshold) rebuild();
