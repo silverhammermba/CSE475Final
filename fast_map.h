@@ -74,7 +74,7 @@ public:
 		}
 
 		// if the insert would be balanced, do that
-		if (isBucketCountBalanced(num_buckets)) return st_bucket->insert(pair);
+		if (isBucketCountBalanced(num_buckets, m_table.size(), m_threshold)) return st_bucket->insert(pair);
 
 		// else insert would unbalance table, rebuild
 		return insertAndRebuild(pair);
@@ -138,6 +138,38 @@ private:
 		return ST_BUCKET_SCALE * threshold;
 	}
 
+	// find a balanced hash onto num_st_buckets for the pairs in buckets and the given threshold.
+	// return the hash and the distribution of pairs in the subtables
+	static std::pair<hash_t, std::vector<size_t>> findBalancedHash(const st_table_t& buckets, size_t num_st_buckets, size_t threshold)
+	{
+		hash_t hash;
+		size_t num_buckets;
+		std::vector<size_t> hash_distribution(num_st_buckets);
+
+		do
+		{
+			hash = random_hash<K>(num_st_buckets);
+
+			// Calculate hash distribution
+			std::fill(hash_distribution.begin(), hash_distribution.end(), 0);
+			for (const auto& b : buckets) ++hash_distribution.at(hash(b->first));
+
+			// Determine number of buckets in resulting subtables
+			num_buckets = 0;
+			for (auto size : hash_distribution) num_buckets += subtable_t::numBucketsFromNumPairs(size);
+		}
+		while (!isBucketCountBalanced(num_buckets, num_st_buckets, threshold));
+
+		return std::make_pair(hash, hash_distribution);
+	}
+
+	// would the given total number of buckets be balanced for the threshold and number of subtable buckets?
+	static bool isBucketCountBalanced(size_t bucket_count, size_t st_bucket_count, size_t threshold)
+	{
+		if (bucket_count <= 4 * threshold) return true;
+		return (bucket_count - 4 * threshold) * st_bucket_count <= 32 * threshold * threshold;
+	}
+
 	// convenience functions for getting the subtable bucket for a key
 	subtable_t*& getSubtable(const K& key)
 	{
@@ -179,26 +211,23 @@ private:
 		}
 
 		// move all pairs from subtales into a list
-		size_t num_pairs = m_num_pairs;
-		st_table_t buckets = moveBucketsToList(num_pairs + 1);
+		st_table_t buckets = moveBucketsToList(m_num_pairs + 1);
 
 		// add new pair, if specified
-		if (new_bucket)
-		{
-			buckets.push_back(new_bucket);
-			++num_pairs;
-		}
+		if (new_bucket) buckets.push_back(new_bucket);
+
+		m_num_pairs = buckets.size();
 
 		/* TODO
 		 * worry about threshold (thus m_table) shrinking and leaking memory.
 		 * do we even want threshold to be able to shrink e.g. if we are given
 		 * a hint for a large threshold in the constructor?
 		 */
-		m_threshold = thresholdFromNumPairs(num_pairs);
+		m_threshold = thresholdFromNumPairs(m_num_pairs);
 		m_table.resize(stBucketCountFromThreshold(m_threshold));
 
 		// get balanced hash and hash distribution
-		auto hd_pair = findBalancedHash(buckets, m_table.size());
+		auto hd_pair = findBalancedHash(buckets, m_table.size(), m_threshold);
 		m_hash = hd_pair.first;
 		auto& hash_distribution = hd_pair.second;
 
@@ -242,39 +271,6 @@ private:
 		}
 
 		return buckets;
-	}
-
-	// calculate a balanced hash onto num_st_buckets for the pairs in buckets.
-	// return the hash and the distribution of pairs in the subtables
-	// TODO maybe resize m_table in place rather than calculating hash_distribution?
-	std::pair<hash_t, std::vector<size_t>> findBalancedHash(const st_table_t& buckets, size_t num_st_buckets) const
-	{
-		hash_t hash;
-		size_t num_buckets;
-		std::vector<size_t> hash_distribution(num_st_buckets);
-
-		do
-		{
-			hash = random_hash<K>(num_st_buckets);
-
-			// Calculate hash distribution
-			std::fill(hash_distribution.begin(), hash_distribution.end(), 0);
-			for (const auto& b : buckets) ++hash_distribution.at(hash(b->first));
-
-			// Determine number of buckets in resulting subtables
-			num_buckets = 0;
-			for (auto size : hash_distribution) num_buckets += subtable_t::numBucketsFromNumPairs(size);
-		}
-		while (!isBucketCountBalanced(num_buckets));
-
-		return std::make_pair(hash, hash_distribution);
-	}
-
-	// would the given total number of buckets be balanced for the current threshold?
-	bool isBucketCountBalanced(size_t bucket_count) const
-	{
-		if (bucket_count <= 4 * m_threshold) return true;
-		return (bucket_count - 4 * m_threshold) * m_table.size() <= 32 * m_threshold * m_threshold;
 	}
 
 	table_t m_table;                // internal hash table
