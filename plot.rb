@@ -1,9 +1,9 @@
 # run speed tests, return number of ticks
 def run key_max, threads, iters, task, n = 1, branch = nil
   branch = [branch] unless branch.is_a? Enumerable
-  key_max = (key_max..key_max) unless key_max.is_a? Enumerable
-  threads = (threads..threads) unless threads.is_a? Enumerable
-  iters = (iters..iters) unless iters.is_a? Enumerable
+  key_max = [key_max] unless key_max.is_a? Enumerable
+  threads = [threads] unless threads.is_a? Enumerable
+  iters = [iters] unless iters.is_a? Enumerable
   task = [task] unless task.is_a? Enumerable
 
   data = []
@@ -33,20 +33,3 @@ def run key_max, threads, iters, task, n = 1, branch = nil
 
   data
 end
-
-d = run(2_500, 1, (1_000..100_000).step(1_000), ?r, 10, %w{course std})
-h = {}
-d.each { |r| h[r[0]] ||= []; h[r[0]] << [r[1], r[2]] }
-h.each do |k, v|
-  File.open("#{k}.data", 'w') do |f|
-    v.each { |x| f.puts x.join("\t") }
-  end
-end
-
-#make_chart(
-#  ['course', test_iter(2_500, 1, ?r, 10)],
-#  ['master', test_iter(2_500, 1, ?r, 10)],
-#  ['std', test_iter(2_500, 1, ?r, 10)],
-#)
-#
-#test_branch('std')
