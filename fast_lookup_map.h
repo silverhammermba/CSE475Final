@@ -57,8 +57,8 @@ public:
 		readwrite_lock_t rwlock(rlock);
 
 		--m_num_pairs;
-		delete getBucket(key);
-		getBucket(key) = nullptr;
+		delete getBucketLocked(key);
+		getBucketLocked(key) = nullptr;
 
 		return 1;
 	}
@@ -68,14 +68,14 @@ public:
 	{
 		read_lock_t rlock(m_mutex);
 		if (!count(key)) throw std::out_of_range("FastLookupMap::at");
-		return getBucket(key)->second;
+		return getBucketLocked(key)->second;
 	}
 
 	// return 1 if pair matching key is in table, else return 0
 	size_t count(const K& key) const
 	{
 		read_lock_t rlock(m_mutex);
-		auto bucket = getBucket(key);
+		auto bucket = getBucketLocked(key);
 		return bucket && bucket->first == key;
 	}
 
@@ -89,7 +89,6 @@ public:
 	// return maximum number of pairs that can be stored without rebuilding
 	size_t capacity() const
 	{
-		// read lock
 		read_lock_t rlock(m_mutex);
 		return m_capacity; // mj
 	}
@@ -97,7 +96,6 @@ public:
 	// return size of actual hash table
 	size_t bucketCount() const
 	{
-		// read lock
 		read_lock_t rlock(m_mutex);
 		return m_table.size(); // sj, also number of partitions/bucket count
 	}
@@ -105,7 +103,6 @@ public:
 	// number of elements in given bucket
 	size_t bucketSize(size_t n) const
 	{
-		// read lock
 		read_lock_t rlock(m_mutex);
 		return n < m_table.size() ? m_table[n] != nullptr : 0;
 	}
@@ -113,7 +110,6 @@ public:
 	// bucket index for key
 	size_t bucket(const K& key) const
 	{
-		// read lock
 		read_lock_t rlock(m_mutex);
 		return hashKey(m_hash, key);
 	}
@@ -121,7 +117,6 @@ public:
 	// return hash function
 	hash_t getHash() const
 	{
-		// read lock
 		read_lock_t rlock(m_mutex);
 		return m_hash;
 	}
@@ -131,11 +126,11 @@ public:
 	{
 		size_t cap = capacityFromNumPairs(num_pairs);
 
-		// read lock
 		read_lock_t rlock(m_mutex);
+
 		if (cap > m_capacity)
 		{
-			readwrite_lock_t rwlock(m_mutex);
+			readwrite_lock_t rwlock(rlock);
 			m_capacity = cap;
 			rebuildLocked();
 		}
@@ -144,6 +139,8 @@ public:
 	// remove all pairs (without actually shrinking table)
 	void clear()
 	{
+		write_lock_t wlock(m_mutex);
+
 		m_num_pairs = 0;
 		for (auto& bucket : m_table)
 		{
@@ -222,12 +219,12 @@ private:
 			return false;
 		}
 
-		readwrite_lock_t rwlock(m_mutex);
+		readwrite_lock_t rwlock(rlock);
 
 		++m_num_pairs;
 
 		// if we're over capacity or there is a collision
-		if (m_num_pairs > m_capacity || getBucket(bucket->first))
+		if (m_num_pairs > m_capacity || getBucketLocked(bucket->first))
 		{
 			// force the new pair into the table and then rebuild
 			m_table.push_back(bucket);
@@ -236,7 +233,7 @@ private:
 		}
 
 		// no collision, under capacity. simple insert
-		getBucket(bucket->first) = bucket;
+		getBucketLocked(bucket->first) = bucket;
 
 		return true;
 	}
@@ -244,30 +241,25 @@ private:
 	// check if we can (possibly) insert without rebuilding
 	bool isUnderCapacity() const
 	{
-		// read lock
 		read_lock_t rlock(m_mutex);
 		return m_num_pairs < m_capacity;
 	}
 
 	// convenience functions for getting the bucket for a key
-	inline pair_t*& getBucket(const K& key)
+	// XXX m_mutex MUST be owned (shared or unique) by the calling thread
+	inline pair_t*& getBucketLocked(const K& key)
 	{
-		// read lock
-		read_lock_t rlock(m_mutex);
 		return m_table.at(hashKey(m_hash, key));
 	}
 
-	inline pair_t* const& getBucket(const K& key) const
+	inline pair_t* const& getBucketLocked(const K& key) const
 	{
-		// read lock
-		read_lock_t rlock(m_mutex);
 		return m_table.at(hashKey(m_hash, key));
 	}
 
 	// how many buckets would there be if we insert another pair?
 	size_t bucketCountAfterInsert() const
 	{
-		// read lock
 		read_lock_t rlock(m_mutex);
 		auto num_pairs = m_num_pairs + 1;
 		auto capacity = m_capacity;
@@ -277,7 +269,6 @@ private:
 
 	void rebuild()
 	{
-		// write lock
 		write_lock_t wlock(m_mutex);
 		rebuildLocked();
 	}
@@ -318,14 +309,14 @@ private:
 
 		// move pairs back into the hash table
 		m_table.resize(new_table_size);
-		for (auto& bucket : buckets) getBucket(bucket->first) = bucket;
+		for (auto& bucket : buckets) getBucketLocked(bucket->first) = bucket;
 	}
 
 	table_t m_table;      // internal hash table
 	hash_t m_hash;        // hash function
 	size_t m_num_pairs;   // how many pairs are currently stored
 	size_t m_capacity;    // how many pairs can be stored without rebuilding
-	boost::upgrade_mutex m_mutex;
+	mutable boost::upgrade_mutex m_mutex;
 };
 
 #endif
