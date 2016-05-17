@@ -1,4 +1,4 @@
-CXXFLAGS=-std=c++14 -Wall -Wextra -Wfatal-errors -Wconversion -ggdb -Igoogletest/googletest/include
+CXXFLAGS=-std=c++14 -O2 -Wall -Wextra -Wfatal-errors -Wconversion -Igoogletest/googletest/include
 LDFLAGS=-Lgoogletest/googlemock/gtest
 LDLIBS=-lpthread -lgtest -lboost_system -lboost_program_options -lboost_thread
 SRC=$(wildcard *.cpp)
