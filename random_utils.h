@@ -5,18 +5,6 @@
 #include <random>
 #include <stdexcept>
 
-#ifndef _MSC_VER
-#define NOEXCEPT noexcept
-#else
-#define NOEXCEPT
-#endif
-
-#if defined (_MSC_VER)
-#define thread_local __declspec( thread )
-#elif defined (__GCC__)
-#define thread_local __thread
-#endif
-
 // TODO this hard-coded prime causes infinite loops if too large, why?
 // something to do with modular arithmetic and (key % range) == 1 ?
 static const uint32_t HASH_PRIME = 2695268753U;
@@ -24,9 +12,13 @@ static const uint32_t HASH_PRIME = 2695268753U;
 // return a random size_t >= min and <= max if provided
 inline unsigned int random_uint(unsigned int min, unsigned int max = std::numeric_limits<unsigned int>::max())
 {
-	// TODO thread-safe?
+#ifdef __GNUG__ // if possible make these RNGs properly thread-local
+	static thread_local std::random_device random_device;
+	static thread_local std::mt19937 generator(random_device());
+#else // just hope it works out without it
 	static std::random_device random_device;
 	static std::mt19937 generator(random_device());
+#endif
 
 	std::uniform_int_distribution<unsigned int> dist(min, max);
 	return dist(generator);
