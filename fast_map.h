@@ -30,7 +30,7 @@ public:
 		m_num_pairs{0},
 		m_threshold{thresholdFromNumPairs(num_pairs)}
 	{
-		rebuildLocked();
+		rebuild();
 	}
 
 	~FastMap()
@@ -47,30 +47,36 @@ public:
 	// try to insert pair into the hash table
 	bool insert(const pair_t& pair)
 	{
-		read_lock_t rlock(m_mutex);
-
 		// check for duplicate key
 		if (count(pair.first)) return false;
 
+		read_lock_t rlock(m_mutex);
+
 		// after a certain number of successful inserts, do a rebuild regardless
-		if (m_num_operations >= m_threshold) return insertAndRebuild(pair);
+		if (m_num_operations >= m_threshold) return insertAndRebuild(pair, rlock);
 
 		auto& st_bucket = getSubtableLocked(pair.first);
 
 		// create subtable if it doesn't exist
 		if (!st_bucket)
 		{
-			readwrite_lock_t rwlock(rlock);
-			st_bucket = new FastLookupMap<K, V>();
+			boost::unique_lock<boost::mutex> wlock(m_st_mutex);
+			// now that we have unique access, make sure it still doesn't exist
+			if (!st_bucket) st_bucket = new FastLookupMap<K, V>();
 		}
 
 		// if we can insert without growing the subtable, do that
+		// XXX subtable might get a little unbalanced due to writes after the check, but whatever
 		if (st_bucket->isUnderCapacity())
 		{
-			++m_num_operations;
-			++m_num_pairs;
-
-			return st_bucket->insert(pair);
+			if (st_bucket->insert(pair))
+			{
+				readwrite_lock_t rwlock(rlock);
+				++m_num_operations;
+				++m_num_pairs;
+				return true;
+			}
+			return false;
 		}
 
 		// else we need to see what the effect of adding the pair to the subtable would be
@@ -91,14 +97,18 @@ public:
 		// if the insert would be balanced, do that
 		if (isBucketCountBalanced(num_buckets, m_table.size(), m_threshold))
 		{
-			++m_num_operations;
-			++m_num_pairs;
-
-			return st_bucket->insert(pair);
+			if (st_bucket->insert(pair))
+			{
+				readwrite_lock_t rwlock(rlock);
+				++m_num_operations;
+				++m_num_pairs;
+				return true;
+			}
+			return false;
 		}
 
 		// else insert would unbalance table, rebuild
-		return insertAndRebuildLocked(pair);
+		return insertAndRebuild(pair, rlock);
 	}
 
 	// remove pair matching key from the table
@@ -106,10 +116,10 @@ public:
 	{
 		read_lock_t rlock(m_mutex);
 
-		if (!count(key)) return 0;
-
 		auto& st_bucket = getSubtableLocked(key);
-		st_bucket->erase(key);
+
+		// if there's no subtable, or the erase didn't succeed, nothing to do
+		if (!st_bucket || st_bucket->erase(key) == 0) return 0;
 
 		readwrite_lock_t rwlock(rlock);
 
@@ -126,9 +136,9 @@ public:
 	{
 		read_lock_t rlock(m_mutex);
 
-		if (!count(key)) throw std::out_of_range("FastMap::at");
-		auto& usubtable = getSubtableLocked(key);
-		return !usubtable ? 0 : usubtable->at(key);
+		auto& st_bucket = getSubtableLocked(key);
+		if (!st_bucket) throw std::out_of_range("FastMap::at");
+		return st_bucket->at(key);
 	}
 
 	// return 1 if pair matching key is in table, else return 0
@@ -225,14 +235,14 @@ private:
 		insertAndRebuildLocked(nullptr);
 	}
 
-	bool insertAndRebuild(const pair_t& new_pair)
+	// upgrade rlock to a unique lock and insert new_pair
+	bool insertAndRebuild(const pair_t& new_pair, read_lock_t& rlock)
 	{
-		write_lock_t wlock(m_mutex);
+		readwrite_lock_t rwlock(rlock);
 		return insertAndRebuildLocked(new pair_t(new_pair));
 	}
 
-
-	// insert a new pair (if non-null) and rebuild the entire table
+	// insert new pair and rebuild the entire table
 	bool insertAndRebuildLocked(const pair_t& new_pair)
 	{
 		return insertAndRebuildLocked(new pair_t(new_pair));
@@ -337,8 +347,18 @@ private:
 	 *   - whether the subtables are unbalanced and must be rebuilt
 	 */
 
+	/* this mutex protects all member variables and deletes/resizes in m_table.
+	 * a shared lock (read_lock_t) indicates that member variables should not
+	 * be changed and subtables should not be deleted. a unique lock
+	 * (write_lock_t/readwrite_lock_t) allows any aspect to be changed
+	 */
 	mutable boost::upgrade_mutex m_mutex;
-	mutable boost::mutex m_st_mutex;
+	/* this mutex only protects *creating* subtables. m_mutex must have shared
+	 * ownership before you lock it to ensure that m_mutex is not held uniquely
+	 * (e.g. for rebuild). this is because other threads can all safely read
+	 * while new subtables are being created
+	 */
+	boost::mutex m_st_mutex;
 };
 
 #endif
