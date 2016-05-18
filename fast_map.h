@@ -3,12 +3,12 @@
 
 #include <algorithm>
 #include <functional>
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 #include <boost/thread/locks.hpp>
 #include <boost/thread/shared_mutex.hpp>
-
 #include "fast_lookup_map.h"
 
 template <class K, class V>
@@ -22,6 +22,7 @@ class FastMap
 
 	typedef boost::shared_lock<boost::shared_mutex> read_lock_t;
 	typedef boost::unique_lock<boost::shared_mutex> write_lock_t;
+
 public:
 	// construct with a hint that we need to store at least num_pairs pairs
 	FastMap(size_t num_pairs = 0)
@@ -39,14 +40,15 @@ public:
 
 	size_t size() const
 	{
-		read_lock_t lock(m_mutex);
+		//read_lock_t lock(m_mutex);
 		return m_num_pairs;
 	}
 
 	// try to insert pair into the hash table
 	bool insert(const pair_t& pair)
 	{
-		write_lock_t lock(m_mutex);
+		std::lock_guard<std::mutex> lg(m_mutex);
+		//write_lock_t lock(m_mutex);
 
 		// check for duplicate key
 		if (locked_count(pair.first)) return false;
@@ -99,7 +101,8 @@ public:
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
-		write_lock_t lock(m_mutex);
+		std::lock_guard<std::mutex> lg(m_mutex);
+		//write_lock_t lock(m_mutex);
 
 		if (!locked_count(key)) return 0;
 
@@ -118,16 +121,17 @@ public:
 	// return the value matching key
 	V at(const K& key) const
 	{
-		read_lock_t lock(m_mutex);
+		//read_lock_t lock(m_mutex);
 		if (!locked_count(key)) throw std::out_of_range("FastMap::at");
 		auto& usubtable = getSubtable(key);
 		return !usubtable ? 0 : usubtable->at(key);
 	}
 
 	// return 1 if pair matching key is in table, else return 0
-	size_t count(const K& key) const
+	size_t count(const K& key)
 	{
-		read_lock_t lock(m_mutex);
+		std::lock_guard<std::mutex> lg(m_mutex);
+		//read_lock_t lock(m_mutex);
 		auto& st_bucket = getSubtable(key);
 		return st_bucket && st_bucket->count(key);
 	}
@@ -135,7 +139,7 @@ public:
 	// rebuild the entire table
 	void rebuild()
 	{
-		write_lock_t lock(m_mutex);
+		//write_lock_t lock(m_mutex);
 		insertAndRebuild(nullptr);
 	}
 
@@ -322,7 +326,8 @@ private:
 	 *   - whether the subtables are unbalanced and must be rebuilt
 	 */
 
-	mutable boost::shared_mutex m_mutex;
+	//mutable boost::shared_mutex m_mutex;
+	std::mutex m_mutex;
 };
 
 #endif

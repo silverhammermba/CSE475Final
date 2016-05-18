@@ -65,7 +65,7 @@ int main(int argc, char** argv)
 
 	auto time = boost::posix_time::to_iso_string(boost::posix_time::microsec_clock::local_time());
 
-	std::ofstream ofs(time + "_timing.csv");
+	std::ofstream ofs(time + "_timing_cg_standard.csv");
 	std::vector<int> thread_count{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
 	int it = 1000000;
 	int keys = 100000;
