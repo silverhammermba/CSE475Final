@@ -2,12 +2,11 @@
 #define FAST_MAP_H
 
 #include <algorithm>
+#include <atomic>
 #include <functional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include <boost/thread/locks.hpp>
-#include <boost/thread/shared_mutex.hpp>
 
 #include "fast_lookup_map.h"
 
@@ -19,9 +18,6 @@ class FastMap
 	typedef FastLookupMap<K, V> subtable_t;
 	typedef std::vector<subtable_t*> table_t;
 	typedef std::vector<pair_t*> st_table_t; // the internal table type for the subtables (used during rebuilds)
-
-	typedef boost::shared_lock<boost::shared_mutex> read_lock_t;
-	typedef boost::unique_lock<boost::shared_mutex> write_lock_t;
 public:
 	// construct with a hint that we need to store at least num_pairs pairs
 	FastMap(size_t num_pairs = 0)
@@ -37,22 +33,55 @@ public:
 		for (auto& st_bucket : m_table) delete st_bucket;
 	}
 
+	void lock_read() const
+	{
+		while (writing);
+		++readers;
+	}
+
+	void unlock_read() const
+	{
+		--readers;
+	}
+
+	void lock_write() const
+	{
+		// try to set writing flag
+		bool fls = false;
+		while (!writing.compare_exchange_weak(fls, true)) fls = false;
+		// wait for readers to leave
+		while (readers > 0);
+	}
+
+	void unlock_write() const
+	{
+		writing = false;
+	}
+
 	size_t size() const
 	{
-		read_lock_t lock(m_mutex);
 		return m_num_pairs;
 	}
 
 	// try to insert pair into the hash table
 	bool insert(const pair_t& pair)
 	{
-		write_lock_t lock(m_mutex);
+		lock_write();
 
 		// check for duplicate key
-		if (locked_count(pair.first)) return false;
+		if (locked_count(pair.first))
+		{
+			unlock_write();
+			return false;
+		}
 
 		// after a certain number of successful inserts, do a rebuild regardless
-		if (m_num_operations >= m_threshold) return insertAndRebuild(pair);
+		if (m_num_operations >= m_threshold)
+		{
+			bool r = insertAndRebuild(pair);
+			unlock_write();
+			return r;
+		}
 
 		auto& st_bucket = getSubtable(pair.first);
 
@@ -65,7 +94,9 @@ public:
 			++m_num_operations;
 			++m_num_pairs;
 
-			return st_bucket->insert(pair);
+			bool r = st_bucket->insert(pair);
+			unlock_write();
+			return r;
 		}
 
 		// else we need to see what the effect of adding the pair to the subtable would be
@@ -89,19 +120,27 @@ public:
 			++m_num_operations;
 			++m_num_pairs;
 
-			return st_bucket->insert(pair);
+			bool r = st_bucket->insert(pair);
+			unlock_write();
+			return r;
 		}
 
 		// else insert would unbalance table, rebuild
-		return insertAndRebuild(pair);
+		bool r = insertAndRebuild(pair);
+		unlock_write();
+		return r;
 	}
 
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
-		write_lock_t lock(m_mutex);
+		lock_write();
 
-		if (!locked_count(key)) return 0;
+		if (!locked_count(key))
+		{
+			unlock_write();
+			return 0;
+		}
 
 		auto& st_bucket = getSubtable(key);
 
@@ -112,31 +151,41 @@ public:
 
 		if (m_num_operations >= m_threshold) locked_rebuild();
 
+		unlock_write();
 		return 1;
 	}
 
 	// return the value matching key
 	V at(const K& key) const
 	{
-		read_lock_t lock(m_mutex);
-		if (!locked_count(key)) throw std::out_of_range("FastMap::at");
+		lock_read();
+		if (!locked_count(key))
+		{
+			unlock_read();
+			throw std::out_of_range("FastMap::at");
+		}
 		auto& usubtable = getSubtable(key);
-		return !usubtable ? 0 : usubtable->at(key);
+		auto& r = usubtable->at(key);
+		unlock_read();
+		return r;
 	}
 
 	// return 1 if pair matching key is in table, else return 0
 	size_t count(const K& key) const
 	{
-		read_lock_t lock(m_mutex);
+		lock_read();
 		auto& st_bucket = getSubtable(key);
-		return st_bucket && st_bucket->count(key);
+		size_t r = st_bucket && st_bucket->count(key);
+		unlock_read();
+		return r;
 	}
 
 	// rebuild the entire table
 	void rebuild()
 	{
-		write_lock_t lock(m_mutex);
+		lock_write();
 		insertAndRebuild(nullptr);
+		unlock_write();
 	}
 
 private:
@@ -322,7 +371,8 @@ private:
 	 *   - whether the subtables are unbalanced and must be rebuilt
 	 */
 
-	mutable boost::shared_mutex m_mutex;
+	mutable std::atomic<bool> writing {false};
+	mutable std::atomic<unsigned int> readers {0};
 };
 
 #endif
