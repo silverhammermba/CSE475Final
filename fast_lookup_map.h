@@ -7,9 +7,8 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include <boost/thread/locks.hpp>
-#include <boost/thread/shared_mutex.hpp>
 
+#include "rwlock.h"
 #include "random_utils.h"
 
 template<class K, class V> class FastMap;
@@ -23,9 +22,9 @@ class FastLookupMap
 	typedef std::pair<const K, V> pair_t;
 	typedef std::vector<pair_t*> table_t;
 
-	typedef boost::upgrade_lock<boost::upgrade_mutex> read_lock_t;
-	typedef boost::unique_lock<boost::upgrade_mutex> write_lock_t;
-	typedef boost::upgrade_to_unique_lock<boost::upgrade_mutex> readwrite_lock_t;
+	typedef ReadLock read_lock_t;
+	typedef WriteLock write_lock_t;
+	typedef UpgradeLock readwrite_lock_t;
 
 public:
 	// construct with a hint that we need to store at least num_pairs pairs
@@ -326,7 +325,7 @@ private:
 	size_t m_num_pairs;   // how many pairs are currently stored
 	size_t m_capacity;    // how many pairs can be stored without rebuilding
 
-	mutable boost::upgrade_mutex m_mutex;
+	mutable RWMutex m_mutex;
 };
 
 #endif

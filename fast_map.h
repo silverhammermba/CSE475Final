@@ -3,12 +3,12 @@
 
 #include <algorithm>
 #include <functional>
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include <boost/thread/locks.hpp>
-#include <boost/thread/shared_mutex.hpp>
 
+#include "rwlock.h"
 #include "fast_lookup_map.h"
 
 template <class K, class V>
@@ -20,9 +20,9 @@ class FastMap
 	typedef std::vector<subtable_t*> table_t;
 	typedef std::vector<pair_t*> st_table_t; // the internal table type for the subtables (used during rebuilds)
 
-	typedef boost::upgrade_lock<boost::upgrade_mutex> read_lock_t;
-	typedef boost::unique_lock<boost::upgrade_mutex> write_lock_t;
-	typedef boost::upgrade_to_unique_lock<boost::upgrade_mutex> readwrite_lock_t;
+	typedef ReadLock read_lock_t;
+	typedef WriteLock write_lock_t;
+	typedef UpgradeLock readwrite_lock_t;
 public:
 	// construct with a hint that we need to store at least num_pairs pairs
 	FastMap(size_t num_pairs = 0)
@@ -60,7 +60,7 @@ public:
 		// create subtable if it doesn't exist
 		if (!st_bucket)
 		{
-			boost::unique_lock<boost::mutex> wlock(m_st_mutex);
+			std::lock_guard<std::mutex> wlock(m_st_mutex);
 			// now that we have unique access, make sure it still doesn't exist
 			if (!st_bucket) st_bucket = new FastLookupMap<K, V>();
 		}
@@ -352,13 +352,13 @@ private:
 	 * be changed and subtables should not be deleted. a unique lock
 	 * (write_lock_t/readwrite_lock_t) allows any aspect to be changed
 	 */
-	mutable boost::upgrade_mutex m_mutex;
+	mutable RWMutex m_mutex;
 	/* this mutex only protects *creating* subtables. m_mutex must have shared
 	 * ownership before you lock it to ensure that m_mutex is not held uniquely
 	 * (e.g. for rebuild). this is because other threads can all safely read
 	 * while new subtables are being created
 	 */
-	boost::mutex m_st_mutex;
+	std::mutex m_st_mutex;
 };
 
 #endif
