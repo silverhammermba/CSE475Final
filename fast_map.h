@@ -33,29 +33,77 @@ public:
 		for (auto& st_bucket : m_table) delete st_bucket;
 	}
 
+	static unsigned int readers(unsigned int rw)
+	{
+		return rw >> 1;
+	}
+
+	static unsigned int writing(unsigned int rw)
+	{
+		return rw & 1;
+	}
+
+	static unsigned int mkrw(unsigned int rds, unsigned int wrt)
+	{
+		return (rds << 1) | wrt;
+	}
+
 	void lock_read() const
 	{
-		while (writing);
-		++readers;
+		// repeatedly try to add one more reader, without a write lock
+		unsigned int old_rw = mkrw(readers(m_rw), 0);
+		unsigned int new_rw = mkrw(readers(old_rw) + 1, 0);
+		while (!m_rw.compare_exchange_weak(old_rw, new_rw))
+		{
+			old_rw = mkrw(readers(old_rw), 0);
+			new_rw = mkrw(readers(old_rw) + 1, 0);
+		}
 	}
 
 	void unlock_read() const
 	{
-		--readers;
+		// repeatedly try to remove a reader (ignoring write lock)
+		unsigned int old_rw = m_rw;
+		unsigned int new_rw = mkrw(readers(old_rw) - 1, writing(old_rw));
+		while (!m_rw.compare_exchange_weak(old_rw, new_rw))
+		{
+			new_rw = mkrw(readers(old_rw) - 1, writing(old_rw));
+		}
 	}
 
 	void lock_write() const
 	{
-		// try to set writing flag
-		bool fls = false;
-		while (!writing.compare_exchange_weak(fls, true)) fls = false;
+		// repeatedly try to set writing from false to true (ignoring readers)
+		unsigned int old_rw = mkrw(readers(m_rw), 0);
+		unsigned int new_rw = mkrw(readers(old_rw), 1);
+		while (!m_rw.compare_exchange_weak(old_rw, new_rw))
+		{
+			old_rw = mkrw(readers(old_rw), 0);
+			new_rw = mkrw(readers(old_rw), 1);
+		}
+
 		// wait for readers to leave
-		while (readers > 0);
+		while (readers(m_rw) > 0);
 	}
 
 	void unlock_write() const
 	{
-		writing = false;
+		m_rw = 0;
+	}
+
+	void lock_upgrade() const
+	{
+		// repeatedly try to set writing from false to true and remove a reader
+		unsigned int old_rw = mkrw(readers(m_rw), 0);
+		unsigned int new_rw = mkrw(readers(old_rw) - 1, 1);
+		while (!m_rw.compare_exchange_weak(old_rw, new_rw))
+		{
+			old_rw = mkrw(readers(old_rw), 0);
+			new_rw = mkrw(readers(old_rw) - 1, 1);
+		}
+
+		// wait for readers to leave
+		while (readers(m_rw) > 0);
 	}
 
 	size_t size() const
@@ -371,8 +419,7 @@ private:
 	 *   - whether the subtables are unbalanced and must be rebuilt
 	 */
 
-	mutable std::atomic<bool> writing {false};
-	mutable std::atomic<unsigned int> readers {0};
+	mutable std::atomic<unsigned int> m_rw {0};
 };
 
 #endif
