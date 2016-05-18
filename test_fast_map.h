@@ -1,6 +1,8 @@
 #ifndef TEST_FAST_MAP_H
 #define TEST_FAST_MAP_H
 
+#if 0
+
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -114,5 +116,7 @@ TEST_F(AFastMap, CanBeRebuilt)
 		EXPECT_EQ(pair.second, m_map.at(pair.first));
 	}
 }
+
+#endif
 
 #endif

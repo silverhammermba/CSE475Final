@@ -1,6 +1,7 @@
 #include <iostream>
 #include <boost/program_options.hpp>
-
+#include <boost\date_time\posix_time\posix_time.hpp>
+#include <fstream>
 #include "gtest_include.h"
 #include "test_fast_lookup_map.h"
 #include "test_fast_map.h"
@@ -28,7 +29,7 @@ std::istream& operator>>(std::istream& in, Task& task)
 
 int main(int argc, char** argv)
 {
-	po::options_description desc("Allowed options");
+	/*po::options_description desc("Allowed options");
 	desc.add_options()
 		("help,h", "print this message and exit")
 		("unit,u", "run unit tests instead")
@@ -45,22 +46,35 @@ int main(int argc, char** argv)
 	{
 		std::cerr << desc << std::endl;
 		return EXIT_FAILURE;
-	}
+	}*/
 
-	if (options.count("unit"))
+	/*if (options.count("unit"))
 	{
 		::testing::InitGoogleTest(&argc, argv);
 		return RUN_ALL_TESTS();
-	}
+	}*/
 
-	po::notify(options);
+	//po::notify(options);
 
-	std::cout << speed_test<FastMap<int, int>>(
+	/*std::cout << speed_test<FastMap<int, int>>(
 		options["key-max"].as<int>(),
 		options["threads"].as<int>(),
 		options["iters"].as<int>(),
 		options["task"].as<Task>()
-	) << std::endl;
+	) << std::endl;*/
+
+	auto time = boost::posix_time::to_iso_string(boost::posix_time::microsec_clock::local_time());
+
+	std::ofstream ofs(time + "_timing.csv");
+	std::vector<int> thread_count{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+	int it = 1000000;
+	int keys = 100000;
+
+	for (auto t : thread_count)
+	{
+		std::cout << t << std::endl;
+		ofs << t << "," << speed_test<FastMap<int, int>>(keys, t, it / t, Task::BALANCED) << std::endl;
+	}
 
 	return EXIT_SUCCESS;
 }
