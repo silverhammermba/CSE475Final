@@ -31,11 +31,9 @@ void RWMutex::unlock_read()
 {
 	// repeatedly try to remove a reader (ignoring write lock)
 	unsigned int old_rw = m_rw;
-	assert(readers(old_rw) > 0);
 	unsigned int new_rw = mkrw(readers(old_rw) - 1, writing(old_rw));
 	while (!m_rw.compare_exchange_weak(old_rw, new_rw))
 	{
-		assert(readers(old_rw) > 0);
 		new_rw = mkrw(readers(old_rw) - 1, writing(old_rw));
 	}
 }
@@ -64,12 +62,19 @@ void RWMutex::lock_upgrade()
 {
 	// repeatedly try to set writing from false to true and remove a reader
 	unsigned int old_rw = mkrw(readers(m_rw), 0);
-	assert(readers(old_rw) > 0);
 	unsigned int new_rw = mkrw(readers(old_rw) - 1, 1);
 	while (!m_rw.compare_exchange_weak(old_rw, new_rw))
 	{
+		// if another thread has a write lock
+		if (writing(old_rw))
+		{
+			// they might be waiting for our reader to leave
+			unlock_read();
+			// so just acquire a normal write lock
+			lock_write();
+			return;
+		}
 		old_rw = mkrw(readers(old_rw), 0);
-		assert(readers(old_rw) > 0);
 		new_rw = mkrw(readers(old_rw) - 1, 1);
 	}
 
