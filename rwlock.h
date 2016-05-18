@@ -2,7 +2,6 @@
 #define RWLOCK_H
 
 #include <atomic>
-#include <cassert>
 
 class RWMutex
 {
@@ -12,16 +11,17 @@ class RWMutex
 	static unsigned int mkrw(unsigned int, unsigned int);
 public:
 	RWMutex() {};
-	void lock_read();
-	void unlock_read();
-	void lock_write();
-	void unlock_write();
-	void lock_upgrade();
-	void lock_downgrade();
+	void lock_read(); // acquire shared ownership
+	void unlock_read(); // release shared ownership
+	void lock_write(); // acquire unique ownership
+	void unlock_write(); // release unique ownership
+	void lock_upgrade(); // switch from shared to unique ownership
+	void lock_downgrade(); // switch from unique to shared ownership
 };
 
 class UpgradeLock;
 
+// acquire shared ownership of mutex, automatically releasing when destroyed
 class ReadLock
 {
 	friend UpgradeLock;
@@ -39,6 +39,7 @@ public:
 	}
 };
 
+// acquire unique ownership of mutex, automatically releasing when destroyed
 class WriteLock
 {
 	RWMutex& m_mutex;
@@ -55,6 +56,7 @@ public:
 	}
 };
 
+// upgrade lock to unique ownership, automatically reverting to shared when destroyed
 class UpgradeLock
 {
 	ReadLock& m_lock;
@@ -72,3 +74,4 @@ public:
 };
 
 #endif
+
