@@ -6,9 +6,8 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include <boost/thread/locks.hpp>
-#include <boost/thread/shared_mutex.hpp>
 
+#include "rwlock.h"
 #include "fast_lookup_map.h"
 
 template <class K, class V>
@@ -20,8 +19,8 @@ class FastMap
 	typedef std::vector<subtable_t*> table_t;
 	typedef std::vector<pair_t*> st_table_t; // the internal table type for the subtables (used during rebuilds)
 
-	typedef boost::shared_lock<boost::shared_mutex> read_lock_t;
-	typedef boost::unique_lock<boost::shared_mutex> write_lock_t;
+	typedef ReadLock read_lock_t;
+	typedef WriteLock write_lock_t;
 public:
 	// construct with a hint that we need to store at least num_pairs pairs
 	FastMap(size_t num_pairs = 0)
@@ -322,7 +321,7 @@ private:
 	 *   - whether the subtables are unbalanced and must be rebuilt
 	 */
 
-	mutable boost::shared_mutex m_mutex;
+	mutable RWMutex m_mutex;
 };
 
 #endif
