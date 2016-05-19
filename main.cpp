@@ -31,7 +31,15 @@ int main(int argc, char** argv)
 		return EXIT_FAILURE;
 	}
 
-	po::notify(options);
+	try
+	{
+		po::notify(options);
+	}
+	catch (const po::required_option& e)
+	{
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
 
 	std::cout << speed_test<FastMap<int, int>>(
 		options["key-max"].as<int>(),
