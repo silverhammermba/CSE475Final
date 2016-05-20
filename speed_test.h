@@ -5,8 +5,16 @@
 #include <chrono>
 #include <thread>
 #include <vector>
-
+#include <mutex>
 #include "random_utils.h"
+
+std::mutex cout_mutex;
+
+void writeToScreen(const std::string& str)
+{
+	std::lock_guard<std::mutex> lg(cout_mutex);
+	std::cout << str << std::endl;
+}
 
 template<class T>
 std::chrono::high_resolution_clock::rep speed_test(int key_max, int num_threads, int iters, int reads, int writes, int erases, int prepop)
@@ -34,6 +42,8 @@ std::chrono::high_resolution_clock::rep speed_test(int key_max, int num_threads,
 
 		for (int i = 0; i < iters; ++i)
 		{
+			if (i % (iters / 10) == 0) writeToScreen(std::to_string(id) + "\t" + std::to_string(i));			
+
 			int action = random_uint(0, ops);
 			int val = random_uint(0, key_max);
 			if (action < reads)

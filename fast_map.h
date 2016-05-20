@@ -11,6 +11,10 @@
 
 #include "fast_lookup_map.h"
 
+using boost::shared_mutex;
+using boost::upgrade_mutex;
+using boost::upgrade_to_unique_lock;
+
 template <class K, class V>
 class FastMap
 {
@@ -22,6 +26,7 @@ class FastMap
 
 	typedef boost::shared_lock<boost::shared_mutex> read_lock_t;
 	typedef boost::unique_lock<boost::shared_mutex> write_lock_t;
+	typedef boost::upgrade_lock<boost::upgrade_mutex> readwrite_lock_t;;
 public:
 	// construct with a hint that we need to store at least num_pairs pairs
 	FastMap(size_t num_pairs = 0)
@@ -37,22 +42,28 @@ public:
 		for (auto& st_bucket : m_table) delete st_bucket;
 	}
 
-	size_t size() const
+	size_t size()
 	{
-		read_lock_t lock(m_mutex);
+		read_lock_t rb_lock(m_rebuild_mutex);
 		return m_num_pairs;
 	}
 
 	// try to insert pair into the hash table
 	bool insert(const pair_t& pair)
 	{
-		write_lock_t lock(m_mutex);
+		readwrite_lock_t rb_lock(m_rebuild_mutex);
+		write_lock_t st_lock(getSubtableMutex(pair.first));
 
 		// check for duplicate key
 		if (locked_count(pair.first)) return false;
 
 		// after a certain number of successful inserts, do a rebuild regardless
-		if (m_num_operations >= m_threshold) return insertAndRebuild(pair);
+		if (m_num_operations >= m_threshold)
+		{
+			upgrade_to_unique_lock<upgrade_mutex> rb_lock_unique(rb_lock);
+			//st_lock.unlock();
+			return insertAndRebuild(pair);
+		}
 
 		auto& st_bucket = getSubtable(pair.first);
 
@@ -93,13 +104,16 @@ public:
 		}
 
 		// else insert would unbalance table, rebuild
+		upgrade_to_unique_lock<upgrade_mutex> rb_lock_unique(rb_lock);
+		//st_lock.unlock();
 		return insertAndRebuild(pair);
 	}
 
 	// remove pair matching key from the table
 	size_t erase(const K& key)
 	{
-		write_lock_t lock(m_mutex);
+		readwrite_lock_t rb_lock(m_rebuild_mutex);
+		write_lock_t st_lock(getSubtableMutex(key));
 
 		if (!locked_count(key)) return 0;
 
@@ -110,24 +124,33 @@ public:
 		++m_num_operations;
 		--m_num_pairs;
 
-		if (m_num_operations >= m_threshold) locked_rebuild();
+		if (m_num_operations >= m_threshold)
+		{
+			upgrade_to_unique_lock<upgrade_mutex> rb_lock_unique(rb_lock);
+			//st_lock.unlock();
+			locked_rebuild();
+		}
 
 		return 1;
 	}
 
 	// return the value matching key
-	V at(const K& key) const
+	V at(const K& key)
 	{
-		read_lock_t lock(m_mutex);
+		read_lock_t rb_lock(m_rebuild_mutex);
+		read_lock_t st_lock(getSubtableMutex(key));
+
 		if (!locked_count(key)) throw std::out_of_range("FastMap::at");
 		auto& usubtable = getSubtable(key);
 		return !usubtable ? 0 : usubtable->at(key);
 	}
 
 	// return 1 if pair matching key is in table, else return 0
-	size_t count(const K& key) const
+	size_t count(const K& key)
 	{
-		read_lock_t lock(m_mutex);
+		read_lock_t rb_lock(m_rebuild_mutex);
+		read_lock_t st_lock(getSubtableMutex(key));
+
 		auto& st_bucket = getSubtable(key);
 		return st_bucket && st_bucket->count(key);
 	}
@@ -135,7 +158,7 @@ public:
 	// rebuild the entire table
 	void rebuild()
 	{
-		write_lock_t lock(m_mutex);
+		write_lock_t rb_lock(m_rebuild_mutex);
 		insertAndRebuild(nullptr);
 	}
 
@@ -217,6 +240,11 @@ private:
 		return m_table.at(m_hash(key));
 	}
 
+	shared_mutex& getSubtableMutex(const K& key)
+	{
+		return *m_subtable_mutex.at(m_hash(key));
+	}
+
 	// insert a new pair and rebuild the entire table
 	bool insertAndRebuild(const pair_t& new_pair)
 	{
@@ -230,7 +258,15 @@ private:
 		// if the table is empty (and we aren't inserting) rebuilding is easy
 		if (!new_bucket && m_num_pairs == 0)
 		{
-			m_table.resize(stBucketCountFromThreshold(m_threshold));
+			auto bucket_count = stBucketCountFromThreshold(m_threshold);
+
+			m_table.resize(bucket_count);
+			m_subtable_mutex.resize(bucket_count);
+			for (auto& umutex : m_subtable_mutex)
+			{
+				if (umutex == nullptr) umutex = std::make_unique<shared_mutex>();
+			}
+
 			m_hash = random_hash<K>(m_table.size());
 			m_num_operations = 0;
 			return false;
@@ -261,7 +297,14 @@ private:
 		 * a hint for a large threshold in the constructor?
 		 */
 		m_threshold = thresholdFromNumPairs(m_num_pairs);
-		m_table.resize(stBucketCountFromThreshold(m_threshold));
+		auto bucket_count = stBucketCountFromThreshold(m_threshold);
+
+		m_table.resize(bucket_count);
+		m_subtable_mutex.resize(bucket_count);
+		for (auto& umutex : m_subtable_mutex)
+		{
+			if (umutex == nullptr) umutex = std::make_unique<shared_mutex>();
+		}
 
 		// get balanced hash and hash distribution
 		auto hd_pair = findBalancedHash(buckets, m_table.size(), m_threshold);
@@ -313,16 +356,17 @@ private:
 	table_t m_table;                // internal hash table
 	hash_t m_hash;                  // hash function
 	// variables
-	size_t m_num_operations; // how many successful inserts/deletes have been performed since the last rebuild
-	size_t m_num_pairs; // how many pairs are currently stored
-	size_t m_threshold; // M, the threshold
+	std::atomic<size_t> m_num_operations; // how many successful inserts/deletes have been performed since the last rebuild
+	std::atomic<size_t> m_num_pairs; // how many pairs are currently stored
+	std::atomic<size_t> m_threshold; // M, the threshold
 	/* the threshold ties together several aspects of the table:
 	 *   - how many operations can be done before a rebuild
 	 *   - how many buckets there are at the top level
 	 *   - whether the subtables are unbalanced and must be rebuilt
 	 */
 
-	mutable boost::shared_mutex m_mutex;
+	upgrade_mutex m_rebuild_mutex;
+	std::vector<std::unique_ptr<shared_mutex>> m_subtable_mutex;
 };
 
 #endif
