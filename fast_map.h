@@ -11,7 +11,7 @@ class FastMap
 public:
 	// construct with a hint that we need to store at least num_pairs pairs
 	FastMap(size_t num_pairs = 0)
-		: m_table{num_pairs}
+		: m_table(num_pairs)
 	{
 	}
 
