@@ -23,25 +23,34 @@ int main(int argc, char** argv)
 	;
 
 	po::variables_map options;
-	po::store(po::parse_command_line(argc, argv, desc), options);
 
-	if (options.count("help"))
+	try
 	{
-		std::cerr << desc << std::endl;
+		po::store(po::parse_command_line(argc, argv, desc), options);
+
+		if (options.count("help"))
+		{
+			std::cerr << desc << std::endl;
+			return EXIT_FAILURE;
+		}
+
+		po::notify(options);
+
+		std::cout << speed_test<FastMap<int, int>>(
+			options["key-max"].as<int>(),
+			options["threads"].as<int>(),
+			options["iters"].as<int>(),
+			options["read"].as<int>(),
+			options["write"].as<int>(),
+			options["erase"].as<int>(),
+			options["pop"].as<int>()
+		) << std::endl;
+	}
+	catch (const po::error& e)
+	{
+		std::cerr << e.what() << std::endl << desc << std::endl;
 		return EXIT_FAILURE;
 	}
-
-	po::notify(options);
-
-	std::cout << speed_test<FastMap<int, int>>(
-		options["key-max"].as<int>(),
-		options["threads"].as<int>(),
-		options["iters"].as<int>(),
-		options["read"].as<int>(),
-		options["write"].as<int>(),
-		options["erase"].as<int>(),
-		options["pop"].as<int>()
-	) << std::endl;
 
 	return EXIT_SUCCESS;
 }
