@@ -3,15 +3,16 @@
 
 #include <unordered_map>
 #include <utility>
-
-#include "rwlock.h"
+#include <boost/thread/locks.hpp>
+#include <boost/thread/shared_mutex.hpp>
 
 template <class K, class V>
 class FastMap
 {
-	typedef ReadLock read_lock_t;
-	typedef WriteLock write_lock_t;
-	typedef UpgradeLock readwrite_lock_t;
+	typedef boost::shared_lock<boost::shared_mutex> read_lock_t;
+	typedef boost::unique_lock<boost::shared_mutex> write_lock_t;
+	typedef boost::upgrade_lock<boost::shared_mutex> readwrite_lock_t;
+
 public:
 	// construct with a hint that we need to store at least num_pairs pairs
 	FastMap(size_t num_pairs = 0)
@@ -60,7 +61,7 @@ public:
 
 private:
 	std::unordered_map<K, V> m_table;
-	mutable RWMutex m_mutex;
+	mutable boost::shared_mutex m_mutex;
 };
 
 #endif
